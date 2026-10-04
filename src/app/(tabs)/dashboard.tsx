@@ -1,132 +1,678 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
-import { colors } from "../../constants/theme";
-import { useOnboarding } from "../../context/OnboardingContext";
+import {
+  colors,
+} from "../../constants/theme";
 
+import {
+  API_URL,
+} from "../../services/api";
 
+import {
+  useOnboarding,
+} from "../../context/OnboardingContext";
 
-type Meal = {
-  time: string;
+/* ============================================ */
+/* TYPES                                        */
+/* ============================================ */
+
+type DiningHallSlug =
+  | "bursley"
+  | "east-quad"
+  | "markley"
+  | "mosher-jordan"
+  | "north-quad"
+  | "south-quad"
+  | "twigs-at-oxford"
+  | "wolverine-village-dining-hall";
+
+type DiningHallOption = {
+  slug: DiningHallSlug;
   name: string;
-  detail: string;
-  calories: number;
 };
 
+type DiningMenuItem = {
+  meal: string;
+  mealTime: string;
 
-const NUTRIENTS = [
+  name: string;
+
+  calories?: number | undefined;
+
+  totalFatG?: number | undefined;
+
+  saturatedFatG?: number | undefined;
+
+  transFatG?: number | undefined;
+
+  proteinG?: number | undefined;
+
+  sugarG?: number | undefined;
+
+  cholesterolMg?: number | undefined;
+
+  sodiumMg?: number | undefined;
+
+  carbsG?: number | undefined;
+
+  /*
+   * Your current scraper may not
+   * have this yet.
+   *
+   * If fiberG is missing from the
+   * backend, the app will show "—".
+   */
+  fiberG?: number | undefined;
+
+  calciumPercent?: number | undefined;
+
+  ironPercent?: number | undefined;
+
+  vitaminAPercent?: number | undefined;
+
+  vitaminCPercent?: number | undefined;
+
+  allergens: string[];
+
+  traits: string[];
+};
+
+type SelectableDiningItem =
+  DiningMenuItem & {
+    id: string;
+  };
+
+type LoggedDiningItem = {
+  id: string;
+
+  menuItem: DiningMenuItem;
+
+  hall:
+    DiningHallSlug;
+
+  hallName: string;
+
+  servings: number;
+};
+
+type NutrientKey =
+  | "proteinG"
+  | "carbsG"
+  | "fiberG"
+  | "ironPercent"
+  | "vitaminAPercent"
+  | "vitaminCPercent"
+  | "cholesterolMg"
+  | "calciumPercent"
+  | "sugarG"
+  | "sodiumMg"
+  | "totalFatG";
+
+type NutrientConfig = {
+  key: NutrientKey;
+
+  label: string;
+
+  unit: string;
+
+  target: number;
+};
+
+type PickerScreen =
+  | "menu"
+  | "nutrients";
+
+/* ============================================ */
+/* DINING HALLS                                 */
+/* ============================================ */
+
+const DINING_HALLS: DiningHallOption[] = [
   {
-    label: "Protein",
-    value: "74g",
-    target: "112g",
-    percent: 66,
+    slug: "bursley",
+    name: "Bursley",
   },
+
   {
-    label: "Carbs",
-    value: "186g",
-    target: "265g",
-    percent: 70,
+    slug: "east-quad",
+    name: "East Quad",
   },
+
   {
-    label: "Fiber",
-    value: "21g",
-    target: "30g",
-    percent: 70,
+    slug: "markley",
+    name: "Markley",
   },
+
   {
-    label: "Iron",
-    value: "12mg",
-    target: "18mg",
-    percent: 67,
+    slug: "mosher-jordan",
+    name: "Mosher-Jordan",
   },
+
   {
-    label: "Vitamin A",
-    value: "610µg",
-    target: "700µg",
-    percent: 87,
+    slug: "north-quad",
+    name: "North Quad",
   },
+
   {
-    label: "Vitamin C",
-    value: "52mg",
-    target: "75mg",
-    percent: 69,
+    slug: "south-quad",
+    name: "South Quad",
+  },
+
+  {
+    slug: "twigs-at-oxford",
+    name: "Twigs at Oxford",
+  },
+
+  {
+    slug:
+      "wolverine-village-dining-hall",
+
+    name:
+      "Wolverine Village",
   },
 ];
 
+/* ============================================ */
+/* NUTRIENT OPTIONS                             */
+/* ============================================ */
+
+/*
+ * These targets are currently UI defaults.
+ *
+ * Later you can move these into UserProfile
+ * if Gemini/backend calculates personalized
+ * nutrient targets.
+ */
+const NUTRIENT_OPTIONS: NutrientConfig[] = [
+  {
+    key: "proteinG",
+    label: "Protein",
+    unit: "g",
+    target: 112,
+  },
+
+  {
+    key: "carbsG",
+    label: "Carbs",
+    unit: "g",
+    target: 265,
+  },
+
+  {
+    key: "fiberG",
+    label: "Fiber",
+    unit: "g",
+    target: 30,
+  },
+
+  {
+    key: "ironPercent",
+    label: "Iron",
+    unit: "%",
+    target: 100,
+  },
+
+  {
+    key: "vitaminAPercent",
+    label: "Vitamin A",
+    unit: "%",
+    target: 100,
+  },
+
+  {
+    key: "vitaminCPercent",
+    label: "Vitamin C",
+    unit: "%",
+    target: 100,
+  },
+
+  {
+    key: "cholesterolMg",
+    label: "Cholesterol",
+    unit: "mg",
+    target: 300,
+  },
+
+  {
+    key: "calciumPercent",
+    label: "Calcium",
+    unit: "%",
+    target: 100,
+  },
+
+  {
+    key: "sugarG",
+    label: "Sugar",
+    unit: "g",
+    target: 50,
+  },
+
+  {
+    key: "sodiumMg",
+    label: "Sodium",
+    unit: "mg",
+    target: 2300,
+  },
+
+  {
+    key: "totalFatG",
+    label: "Total Fat",
+    unit: "g",
+    target: 78,
+  },
+];
+
+const DEFAULT_VISIBLE_NUTRIENTS: NutrientKey[] = [
+  "proteinG",
+  "carbsG",
+  "fiberG",
+  "ironPercent",
+  "vitaminAPercent",
+  "vitaminCPercent",
+];
+
+/* ============================================ */
+/* HELPERS                                      */
+/* ============================================ */
+
+function todayDateString() {
+  const today =
+    new Date();
+
+  const year =
+    today.getFullYear();
+
+  const month =
+    String(
+      today.getMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
+
+  const day =
+    String(
+      today.getDate()
+    ).padStart(
+      2,
+      "0"
+    );
+
+  return `${year}-${month}-${day}`;
+}
+
+function getNutrientValue(
+  item: DiningMenuItem,
+  key: NutrientKey
+): number | undefined {
+  return item[key];
+}
+
+function totalNutrient(
+  loggedItems: LoggedDiningItem[],
+  key: NutrientKey
+): number | null {
+  let total = 0;
+
+  let found =
+    false;
+
+  for (
+    const logged
+    of loggedItems
+  ) {
+    const value =
+      getNutrientValue(
+        logged.menuItem,
+        key
+      );
+
+    if (
+      typeof value ===
+      "number"
+    ) {
+      total +=
+        value *
+        logged.servings;
+
+      found = true;
+    }
+  }
+
+  return found
+    ? total
+    : null;
+}
+
+function formatNumber(
+  value: number
+) {
+  if (
+    Number.isInteger(
+      value
+    )
+  ) {
+    return String(
+      value
+    );
+  }
+
+  return value.toFixed(
+    1
+  );
+}
+
+function formatNutrientValue(
+  value: number | null,
+  unit: string
+) {
+  if (
+    value === null
+  ) {
+    return "—";
+  }
+
+  return `${formatNumber(
+    value
+  )}${unit}`;
+}
+
+/* ============================================ */
+/* DASHBOARD                                    */
+/* ============================================ */
 
 export default function DashboardScreen() {
-  const { profile } = useOnboarding();
+  const {
+    profile,
+  } = useOnboarding();
 
   const calorieGoal =
-    profile.calorieGoal ?? 2150;
+    profile.calorieGoal ??
+    2150;
 
-  const [showAddMeal, setShowAddMeal] =
+  const [
+    showDiningPicker,
+    setShowDiningPicker,
+  ] =
     useState(false);
 
-  const [planned, setPlanned] =
+  const [
+    pickerStartScreen,
+    setPickerStartScreen,
+  ] =
+    useState<PickerScreen>(
+      "menu"
+    );
+
+  const [
+    loggedItems,
+    setLoggedItems,
+  ] =
+    useState<
+      LoggedDiningItem[]
+    >([]);
+
+  const [
+    visibleNutrients,
+    setVisibleNutrients,
+  ] =
+    useState<
+      NutrientKey[]
+    >(
+      DEFAULT_VISIBLE_NUTRIENTS
+    );
+
+  const [
+    planned,
+    setPlanned,
+  ] =
     useState(false);
 
-  const [meals, setMeals] =
-    useState<Meal[]>([
-      {
-        time: "8:20 AM",
-        name: "Breakfast",
-        detail:
-          "Oatmeal, blueberries, almond butter",
-        calories: 486,
-      },
-      {
-        time: "12:45 PM",
-        name: "Lunch",
-        detail:
-          "Tofu grain bowl, roasted vegetables",
-        calories: 672,
-      },
-    ]);
-
+  /* ========================================== */
+  /* CALORIES                                   */
+  /* ========================================== */
 
   const caloriesConsumed =
-    meals.reduce(
-      (sum, meal) =>
-        sum + meal.calories,
-      0
+    useMemo(
+      () =>
+        loggedItems.reduce(
+          (
+            total,
+            logged
+          ) =>
+            total +
+            (logged
+              .menuItem
+              .calories ??
+              0) *
+              logged.servings,
+
+          0
+        ),
+
+      [
+        loggedItems,
+      ]
     );
 
   const caloriesLeft =
     Math.max(
-      calorieGoal - caloriesConsumed,
+      calorieGoal -
+        caloriesConsumed,
+
       0
     );
 
   const caloriePercent =
     Math.min(
       Math.round(
-        (caloriesConsumed /
-          calorieGoal) *
+        (
+          caloriesConsumed /
+          calorieGoal
+        ) *
           100
       ),
+
       100
     );
 
+  /* ========================================== */
+  /* NUTRIENT TOTALS                            */
+  /* ========================================== */
+
+  const nutrientTotals =
+    useMemo(() => {
+      const totals: Partial<
+        Record<
+          NutrientKey,
+          number | null
+        >
+      > = {};
+
+      for (
+        const option
+        of NUTRIENT_OPTIONS
+      ) {
+        totals[
+          option.key
+        ] =
+          totalNutrient(
+            loggedItems,
+            option.key
+          );
+      }
+
+      return totals;
+    }, [
+      loggedItems,
+    ]);
+
+  const displayedNutrients =
+    NUTRIENT_OPTIONS.filter(
+      (option) =>
+        visibleNutrients.includes(
+          option.key
+        )
+    );
+
+  /* ========================================== */
+  /* OPEN MODALS                                */
+  /* ========================================== */
+
+  function openMealPicker() {
+    setPickerStartScreen(
+      "menu"
+    );
+
+    setShowDiningPicker(
+      true
+    );
+  }
+
+  function openNutrientPicker() {
+    setPickerStartScreen(
+      "nutrients"
+    );
+
+    setShowDiningPicker(
+      true
+    );
+  }
+
+  /* ========================================== */
+  /* ADD DINING ITEMS                           */
+  /* ========================================== */
+
+  function addDiningItems(
+    incoming:
+      LoggedDiningItem[]
+  ) {
+    setLoggedItems(
+      (current) => {
+        const next =
+          [...current];
+
+        for (
+          const newItem
+          of incoming
+        ) {
+          /*
+           * If the same dining item
+           * is already logged,
+           * increase its servings.
+           */
+          const existingIndex =
+            next.findIndex(
+              (existing) =>
+                existing.hall ===
+                  newItem.hall &&
+                existing
+                  .menuItem
+                  .name ===
+                  newItem
+                    .menuItem
+                    .name &&
+                existing
+                  .menuItem
+                  .meal ===
+                  newItem
+                    .menuItem
+                    .meal
+            );
+
+          if (
+            existingIndex >=
+            0
+          ) {
+            next[
+              existingIndex
+            ] = {
+              ...next[
+                existingIndex
+              ],
+
+              servings:
+                next[
+                  existingIndex
+                ].servings +
+                newItem.servings,
+            };
+          } else {
+            next.push(
+              newItem
+            );
+          }
+        }
+
+        return next;
+      }
+    );
+  }
+
+  function changeLoggedServings(
+    id: string,
+    difference: number
+  ) {
+    setLoggedItems(
+      (current) =>
+        current
+          .map(
+            (item) =>
+              item.id === id
+                ? {
+                    ...item,
+
+                    servings:
+                      item.servings +
+                      difference,
+                  }
+                : item
+          )
+          .filter(
+            (item) =>
+              item.servings >
+              0
+          )
+    );
+  }
+
+  /* ========================================== */
+  /* UI                                         */
+  /* ========================================== */
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-
-      <View style={styles.screen}>
-
+    <SafeAreaView
+      style={
+        styles.safeArea
+      }
+    >
+      <View
+        style={
+          styles.screen
+        }
+      >
         <ScrollView
-          style={styles.scroll}
+          style={
+            styles.scroll
+          }
           contentContainerStyle={
             styles.scrollContent
           }
@@ -134,20 +680,20 @@ export default function DashboardScreen() {
             false
           }
         >
+          {/* HEADER */}
 
-          {/* ================================= */}
-          {/* HEADER                            */}
-          {/* ================================= */}
-
-          <View style={styles.topbar}>
-
+          <View
+            style={
+              styles.topbar
+            }
+          >
             <Brand />
 
-
-            <Pressable
-              style={styles.notificationButton}
+            <View
+              style={
+                styles.notificationButton
+              }
             >
-
               <Text
                 style={
                   styles.notificationIcon
@@ -161,25 +707,34 @@ export default function DashboardScreen() {
                   styles.notificationDot
                 }
               />
-
-            </Pressable>
-
+            </View>
           </View>
 
+          {/* WELCOME */}
 
-          {/* ================================= */}
-          {/* WELCOME                           */}
-          {/* ================================= */}
-
-          <View style={styles.welcome}>
-
-            <View style={styles.welcomeCopy}>
-
-              <Text style={styles.date}>
-                MONDAY, SEPTEMBER 16
+          <View
+            style={
+              styles.welcome
+            }
+          >
+            <View
+              style={
+                styles.welcomeCopy
+              }
+            >
+              <Text
+                style={
+                  styles.date
+                }
+              >
+                TODAY
               </Text>
 
-              <Text style={styles.welcomeTitle}>
+              <Text
+                style={
+                  styles.welcomeTitle
+                }
+              >
                 Good morning.
               </Text>
 
@@ -188,38 +743,50 @@ export default function DashboardScreen() {
                   styles.welcomeDescription
                 }
               >
-                Here's how you're fueling
-                today.
+                Here's how you're fueling today.
               </Text>
-
             </View>
 
-
-            <View style={styles.streak}>
-
-              <Text style={styles.streakNumber}>
+            <View
+              style={
+                styles.streak
+              }
+            >
+              <Text
+                style={
+                  styles.streakNumber
+                }
+              >
                 5
               </Text>
 
-              <Text style={styles.streakLabel}>
+              <Text
+                style={
+                  styles.streakLabel
+                }
+              >
                 day streak
               </Text>
-
             </View>
-
           </View>
 
+          {/* ENERGY */}
 
-          {/* ================================= */}
-          {/* ENERGY                            */}
-          {/* ================================= */}
-
-          <View style={styles.calorieCard}>
-
-            <View style={styles.calorieCopy}>
-
-              <View style={styles.statusPill}>
-
+          <View
+            style={
+              styles.calorieCard
+            }
+          >
+            <View
+              style={
+                styles.calorieCopy
+              }
+            >
+              <View
+                style={
+                  styles.statusPill
+                }
+              >
                 <View
                   style={
                     styles.statusPillDot
@@ -231,18 +798,17 @@ export default function DashboardScreen() {
                     styles.statusPillText
                   }
                 >
-                  ON TRACK
+                  TODAY
                 </Text>
-
               </View>
 
-
               <Text
-                style={styles.cardTitle}
+                style={
+                  styles.cardTitle
+                }
               >
                 Today's energy
               </Text>
-
 
               <Text
                 style={
@@ -259,18 +825,17 @@ export default function DashboardScreen() {
                   {caloriesLeft.toLocaleString()} calories
                 </Text>
 
-                {" "}left in your daily
-                target.
+                {" "}left in your daily target.
               </Text>
 
-
               <Pressable
-                style={styles.primaryButton}
-                onPress={() =>
-                  setShowAddMeal(true)
+                style={
+                  styles.primaryButton
+                }
+                onPress={
+                  openMealPicker
                 }
               >
-
                 <Text
                   style={
                     styles.primaryButtonPlus
@@ -284,34 +849,42 @@ export default function DashboardScreen() {
                     styles.primaryButtonText
                   }
                 >
-                  Log a meal
+                  Add dining food
                 </Text>
-
               </Pressable>
-
             </View>
 
-
             <CalorieRing
-              percent={caloriePercent}
-              consumed={caloriesConsumed}
-              goal={calorieGoal}
+              percent={
+                caloriePercent
+              }
+              consumed={
+                caloriesConsumed
+              }
+              goal={
+                calorieGoal
+              }
             />
-
           </View>
 
+          {/* NUTRIENTS */}
 
-          {/* ================================= */}
-          {/* NUTRIENTS                         */}
-          {/* ================================= */}
-
-          <View style={styles.nutrientCard}>
-
-            <View style={styles.sectionHeading}>
-
+          <View
+            style={
+              styles.nutrientCard
+            }
+          >
+            <View
+              style={
+                styles.sectionHeading
+              }
+            >
               <View>
-
-                <Text style={styles.eyebrow}>
+                <Text
+                  style={
+                    styles.eyebrow
+                  }
+                >
                   NUTRIENTS
                 </Text>
 
@@ -322,122 +895,138 @@ export default function DashboardScreen() {
                 >
                   Daily balance
                 </Text>
-
               </View>
 
-
-              <Pressable>
-
+              <Pressable
+                onPress={
+                  openNutrientPicker
+                }
+              >
                 <Text
                   style={
                     styles.textButton
                   }
                 >
-                  View all
+                  Customize
                 </Text>
-
               </Pressable>
-
             </View>
-
 
             <View
               style={
                 styles.nutrientGrid
               }
             >
+              {displayedNutrients.map(
+                (
+                  nutrient
+                ) => {
+                  const value =
+                    nutrientTotals[
+                      nutrient.key
+                    ] ??
+                    null;
 
-              {NUTRIENTS.map(
-                (nutrient) => (
+                  const percent =
+                    value ===
+                    null
+                      ? 0
+                      : Math.min(
+                          (
+                            value /
+                            nutrient.target
+                          ) *
+                            100,
 
-                  <View
-                    key={nutrient.label}
-                    style={
-                      styles.nutrient
-                    }
-                  >
+                          100
+                        );
 
+                  return (
                     <View
+                      key={
+                        nutrient.key
+                      }
                       style={
-                        styles.nutrientRow
+                        styles.nutrient
                       }
                     >
-
-                      <Text
+                      <View
                         style={
-                          styles.nutrientLabel
+                          styles.nutrientRow
                         }
                       >
-                        {nutrient.label}
-                      </Text>
-
-
-                      <Text
-                        style={
-                          styles.nutrientValue
-                        }
-                      >
-                        {nutrient.value}
+                        <Text
+                          style={
+                            styles.nutrientLabel
+                          }
+                        >
+                          {
+                            nutrient.label
+                          }
+                        </Text>
 
                         <Text
                           style={
-                            styles.nutrientTarget
+                            styles.nutrientValue
                           }
                         >
-                          {" "}
-                          / {nutrient.target}
+                          {formatNutrientValue(
+                            value,
+                            nutrient.unit
+                          )}
+
+                          <Text
+                            style={
+                              styles.nutrientTarget
+                            }
+                          >
+                            {" "}
+                            /{" "}
+                            {
+                              nutrient.target
+                            }
+                            {
+                              nutrient.unit
+                            }
+                          </Text>
                         </Text>
-
-                      </Text>
-
-                    </View>
-
-
-                    <View
-                      style={
-                        styles.progressTrack
-                      }
-                    >
+                      </View>
 
                       <View
-                        style={[
-                          styles.progressFill,
+                        style={
+                          styles.progressTrack
+                        }
+                      >
+                        <View
+                          style={[
+                            styles.progressFill,
 
-                          {
-                            width:
-                              `${nutrient.percent}%`,
-                          },
-                        ]}
-                      />
-
+                            {
+                              width:
+                                `${percent}%`,
+                            },
+                          ]}
+                        />
+                      </View>
                     </View>
-
-                  </View>
-
-                )
+                  );
+                }
               )}
-
             </View>
-
           </View>
 
-
-          {/* ================================= */}
-          {/* SMART RECOMMENDATION              */}
-          {/* ================================= */}
+          {/* SMART RECOMMENDATION */}
 
           <View
             style={
               styles.recommendationCard
             }
           >
-
             <View
               style={
                 styles.recommendationIcon
               }
             >
-
               <Text
                 style={
                   styles.recommendationSparkle
@@ -445,17 +1034,18 @@ export default function DashboardScreen() {
               >
                 ✦
               </Text>
-
             </View>
-
 
             <View
               style={
                 styles.recommendationCopy
               }
             >
-
-              <Text style={styles.eyebrow}>
+              <Text
+                style={
+                  styles.eyebrow
+                }
+              >
                 SMART RECOMMENDATION
               </Text>
 
@@ -472,40 +1062,11 @@ export default function DashboardScreen() {
                   styles.recommendationDescription
                 }
               >
-                You're free from
-                12:30–2:00 PM. South Quad
-                is a 6-minute walk and has
-                three high-protein
-                vegetarian options today.
+                We'll use your schedule, location,
+                preferences and today's dining menu
+                to suggest a meal.
               </Text>
-
-
-              <View
-                style={
-                  styles.recommendationMeta
-                }
-              >
-
-                <Text
-                  style={
-                    styles.metaText
-                  }
-                >
-                  ⌖ 0.3 mi away
-                </Text>
-
-                <Text
-                  style={
-                    styles.metaText
-                  }
-                >
-                  ◷ Open until 8 PM
-                </Text>
-
-              </View>
-
             </View>
-
 
             <Pressable
               style={[
@@ -515,41 +1076,41 @@ export default function DashboardScreen() {
                   styles.planButtonSelected,
               ]}
               onPress={() =>
-                setPlanned(true)
+                setPlanned(
+                  true
+                )
               }
             >
-
               <Text
-                style={[
-                  styles.planButtonText,
-
-                  planned &&
-                    styles.planButtonTextSelected,
-                ]}
+                style={
+                  styles.planButtonText
+                }
               >
                 {planned
-                  ? "✓ In your plan"
-                  : "+ Add to plan"}
+                  ? "✓"
+                  : "+"}
               </Text>
-
             </Pressable>
-
           </View>
 
+          {/* TODAY'S LOG */}
 
-          {/* ================================= */}
-          {/* MEALS                             */}
-          {/* ================================= */}
-
-          <View style={styles.mealsSection}>
-
+          <View
+            style={
+              styles.mealsSection
+            }
+          >
             <View
-              style={styles.sectionHeading}
+              style={
+                styles.sectionHeading
+              }
             >
-
               <View>
-
-                <Text style={styles.eyebrow}>
+                <Text
+                  style={
+                    styles.eyebrow
+                  }
+                >
                   TODAY'S LOG
                 </Text>
 
@@ -558,19 +1119,18 @@ export default function DashboardScreen() {
                     styles.sectionHeadingTitle
                   }
                 >
-                  Meals
+                  Dining items
                 </Text>
-
               </View>
 
-
               <Pressable
-                style={styles.addButton}
-                onPress={() =>
-                  setShowAddMeal(true)
+                style={
+                  styles.addButton
+                }
+                onPress={
+                  openMealPicker
                 }
               >
-
                 <Text
                   style={
                     styles.addButtonText
@@ -578,124 +1138,116 @@ export default function DashboardScreen() {
                 >
                   + Add
                 </Text>
-
               </Pressable>
-
             </View>
 
-
-            <View style={styles.mealList}>
-
-              {meals.map(
-                (meal, index) => (
-
-                  <MealRow
-                    key={`${meal.name}-${index}`}
-                    meal={meal}
-                  />
-
-                )
-              )}
-
-
-              {planned && (
-
-                <View
+            {loggedItems.length ===
+            0 ? (
+              <View
+                style={
+                  styles.emptyMealCard
+                }
+              >
+                <Text
                   style={
-                    styles.plannedMeal
+                    styles.emptyMealTitle
                   }
                 >
+                  Nothing logged yet
+                </Text>
 
-                  <View
-                    style={
-                      styles.plannedMealIcon
-                    }
-                  >
-                    <Text>✦</Text>
-                  </View>
-
-
-                  <View
-                    style={
-                      styles.plannedMealCopy
-                    }
-                  >
-
-                    <Text
-                      style={
-                        styles.plannedMealEyebrow
+                <Text
+                  style={
+                    styles.emptyMealDescription
+                  }
+                >
+                  Add foods from a Michigan Dining
+                  menu to start tracking today's
+                  calories and nutrients.
+                </Text>
+              </View>
+            ) : (
+              <View
+                style={
+                  styles.mealList
+                }
+              >
+                {loggedItems.map(
+                  (
+                    logged
+                  ) => (
+                    <LoggedFoodRow
+                      key={
+                        logged.id
                       }
-                    >
-                      6:15 PM · PHOTON PLAN
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.plannedMealTitle
+                      logged={
+                        logged
                       }
-                    >
-                      South Quad power bowl
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.plannedMealDescription
+                      onDecrease={() =>
+                        changeLoggedServings(
+                          logged.id,
+                          -1
+                        )
                       }
-                    >
-                      Tofu, quinoa, spinach,
-                      chickpeas · 498 kcal
-                    </Text>
-
-                  </View>
-
-                </View>
-
-              )}
-
-            </View>
-
+                      onIncrease={() =>
+                        changeLoggedServings(
+                          logged.id,
+                          1
+                        )
+                      }
+                    />
+                  )
+                )}
+              </View>
+            )}
           </View>
 
-
           <View
-            style={styles.bottomSpacer}
+            style={
+              styles.bottomSpacer
+            }
           />
-
         </ScrollView>
 
+        {/* DINING / NUTRIENT PICKER */}
 
-        {/* Your existing navigation component */}
+        <DiningPickerModal
+          visible={
+            showDiningPicker
+          }
+          startScreen={
+            pickerStartScreen
+          }
+          visibleNutrients={
+            visibleNutrients
+          }
+          dailyTotals={
+            nutrientTotals
+          }
+          onChangeVisibleNutrients={
+            setVisibleNutrients
+          }
+          onClose={() =>
+            setShowDiningPicker(
+              false
+            )
+          }
+          onAddItems={(
+            items
+          ) => {
+            addDiningItems(
+              items
+            );
 
+            setShowDiningPicker(
+              false
+            );
+          }}
+        />
       </View>
-
-
-      {/* ================================= */}
-      {/* ADD MEAL SHEET                    */}
-      {/* ================================= */}
-
-      <AddMealModal
-        visible={showAddMeal}
-        onClose={() =>
-          setShowAddMeal(false)
-        }
-        onSave={(meal) => {
-
-          setMeals(
-            (current) => [
-              ...current,
-              meal,
-            ]
-          );
-
-          setShowAddMeal(false);
-
-        }}
-      />
-
     </SafeAreaView>
   );
 }
-
 
 /* ============================================ */
 /* BRAND                                        */
@@ -703,26 +1255,35 @@ export default function DashboardScreen() {
 
 function Brand() {
   return (
-
-    <View style={styles.brand}>
-
-      <View style={styles.brandMark}>
-
-        <Text style={styles.brandM}>
+    <View
+      style={
+        styles.brand
+      }
+    >
+      <View
+        style={
+          styles.brandMark
+        }
+      >
+        <Text
+          style={
+            styles.brandM
+          }
+        >
           M
         </Text>
-
       </View>
 
-      <Text style={styles.brandText}>
+      <Text
+        style={
+          styles.brandText
+        }
+      >
         maize
       </Text>
-
     </View>
-
   );
 }
-
 
 /* ============================================ */
 /* CALORIE RING                                 */
@@ -734,1308 +1295,3196 @@ function CalorieRing({
   goal,
 }: {
   percent: number;
+
   consumed: number;
+
   goal: number;
 }) {
-  /*
-   * React Native does not provide the same
-   * inline SVG element used by the Figma
-   * web version without an SVG dependency.
-   *
-   * This recreates the visual as a circular
-   * bordered indicator while keeping the
-   * same central copy.
-   */
-
   return (
-
-    <View style={styles.ringOuter}>
-
-      <View style={styles.ringInner}>
-
-        <Text style={styles.ringNumber}>
+    <View
+      style={
+        styles.ringOuter
+      }
+    >
+      <View
+        style={
+          styles.ringInner
+        }
+      >
+        <Text
+          style={
+            styles.ringNumber
+          }
+        >
           {consumed.toLocaleString()}
         </Text>
 
-        <Text style={styles.ringLabel}>
-          of {goal.toLocaleString()} kcal
+        <Text
+          style={
+            styles.ringLabel
+          }
+        >
+          of{" "}
+          {goal.toLocaleString()} kcal
         </Text>
 
-        <Text style={styles.ringPercent}>
+        <Text
+          style={
+            styles.ringPercent
+          }
+        >
           {percent}% today
         </Text>
-
       </View>
-
     </View>
-
   );
 }
 
-
 /* ============================================ */
-/* MEAL ROW                                     */
+/* LOGGED FOOD ROW                              */
 /* ============================================ */
 
-function MealRow({
-  meal,
+function LoggedFoodRow({
+  logged,
+  onDecrease,
+  onIncrease,
 }: {
-  meal: Meal;
+  logged:
+    LoggedDiningItem;
+
+  onDecrease:
+    () => void;
+
+  onIncrease:
+    () => void;
 }) {
+  const calories =
+    (
+      logged.menuItem
+        .calories ??
+      0
+    ) *
+    logged.servings;
 
   return (
+    <View
+      style={
+        styles.loggedFoodRow
+      }
+    >
+      <View
+        style={
+          styles.loggedFoodStripe
+        }
+      />
 
-    <Pressable style={styles.meal}>
-
-      <View style={styles.mealArt}>
-
-        <Text style={styles.mealArtText}>
-          {meal.name === "Breakfast"
-            ? "◷"
-            : "✦"}
-        </Text>
-
-      </View>
-
-
-      <View style={styles.mealCopy}>
-
-        <Text style={styles.mealTime}>
-          {meal.time}
-        </Text>
-
-        <Text style={styles.mealName}>
-          {meal.name}
-        </Text>
-
-        <Text style={styles.mealDetail}>
-          {meal.detail}
-        </Text>
-
-      </View>
-
-
-      <View style={styles.mealCalories}>
-
+      <View
+        style={
+          styles.loggedFoodCopy
+        }
+      >
         <Text
           style={
-            styles.mealCaloriesNumber
+            styles.loggedFoodName
           }
         >
-          {meal.calories}
+          {
+            logged.menuItem
+              .name
+          }
         </Text>
 
         <Text
           style={
-            styles.mealCaloriesLabel
+            styles.loggedFoodMeta
           }
         >
-          kcal
+          {
+            logged.hallName
+          }
+
+          {" · "}
+
+          {
+            logged.menuItem
+              .meal
+          }
+
+          {" · "}
+
+          {calories.toLocaleString()} kcal
         </Text>
 
+        {logged
+          .menuItem
+          .allergens
+          ?.length >
+          0 && (
+          <Text
+            style={
+              styles.allergenText
+            }
+          >
+            Allergens:{" "}
+            {logged
+              .menuItem
+              .allergens
+              .join(
+                ", "
+              )}
+          </Text>
+        )}
       </View>
 
-
-      <Text style={styles.chevron}>
-        ›
-      </Text>
-
-    </Pressable>
-
+      <ServingControl
+        value={
+          logged.servings
+        }
+        onDecrease={
+          onDecrease
+        }
+        onIncrease={
+          onIncrease
+        }
+      />
+    </View>
   );
 }
 
+/* ============================================ */
+/* SERVING CONTROL                              */
+/* ============================================ */
+
+function ServingControl({
+  value,
+  onDecrease,
+  onIncrease,
+}: {
+  value: number;
+
+  onDecrease:
+    () => void;
+
+  onIncrease:
+    () => void;
+}) {
+  return (
+    <View
+      style={
+        styles.servingControl
+      }
+    >
+      <Pressable
+        style={[
+          styles.servingButton,
+
+          value === 0 &&
+            styles.servingButtonDisabled,
+        ]}
+        disabled={
+          value === 0
+        }
+        onPress={
+          onDecrease
+        }
+      >
+        <Text
+          style={
+            styles.servingMinus
+          }
+        >
+          −
+        </Text>
+      </Pressable>
+
+      <Text
+        style={
+          styles.servingCount
+        }
+      >
+        {value}
+      </Text>
+
+      <Pressable
+        style={[
+          styles.servingButton,
+          styles.servingPlusButton,
+        ]}
+        onPress={
+          onIncrease
+        }
+      >
+        <Text
+          style={
+            styles.servingPlus
+          }
+        >
+          +
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
 /* ============================================ */
-/* ADD MEAL MODAL                               */
+/* DINING PICKER                                */
 /* ============================================ */
 
-function AddMealModal({
+function DiningPickerModal({
   visible,
+  startScreen,
+  visibleNutrients,
+  dailyTotals,
+  onChangeVisibleNutrients,
   onClose,
-  onSave,
+  onAddItems,
 }: {
   visible: boolean;
-  onClose: () => void;
-  onSave: (meal: Meal) => void;
+
+  startScreen:
+    PickerScreen;
+
+  visibleNutrients:
+    NutrientKey[];
+
+  dailyTotals:
+    Partial<
+      Record<
+        NutrientKey,
+        number | null
+      >
+    >;
+
+  onChangeVisibleNutrients:
+    (
+      value:
+        NutrientKey[]
+    ) => void;
+
+  onClose:
+    () => void;
+
+  onAddItems:
+    (
+      items:
+        LoggedDiningItem[]
+    ) => void;
 }) {
-
-  const [mealType, setMealType] =
-    useState<string | null>(null);
-
-  const [food, setFood] =
-    useState(
-      "Greek yogurt, strawberries, granola"
+  const [
+    screen,
+    setScreen,
+  ] =
+    useState<PickerScreen>(
+      startScreen
     );
 
-  const [calories, setCalories] =
-    useState("285");
+  const [
+    selectedHall,
+    setSelectedHall,
+  ] =
+    useState<DiningHallSlug>(
+      "south-quad"
+    );
 
+  const [
+    showHallOptions,
+    setShowHallOptions,
+  ] =
+    useState(false);
 
-  function close() {
-    setMealType(null);
-    onClose();
+  const [
+    menuItems,
+    setMenuItems,
+  ] =
+    useState<
+      SelectableDiningItem[]
+    >([]);
+
+  const [
+    servings,
+    setServings,
+  ] =
+    useState<
+      Record<
+        string,
+        number
+      >
+    >({});
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  /*
+   * When the parent opens this modal
+   * from Customize, show nutrient
+   * settings first.
+   *
+   * When opened from + Add, show menu.
+   */
+  useEffect(
+    () => {
+      if (
+        visible
+      ) {
+        setScreen(
+          startScreen
+        );
+      }
+    },
+
+    [
+      visible,
+      startScreen,
+    ]
+  );
+
+  /*
+   * Fetch dining menu directly from
+   * your Express + Cheerio route.
+   */
+  useEffect(
+    () => {
+      if (
+        !visible ||
+        screen !==
+          "menu"
+      ) {
+        return;
+      }
+
+      let cancelled =
+        false;
+
+      async function loadMenu() {
+        try {
+          setLoading(
+            true
+          );
+
+          setError(
+            null
+          );
+
+          const date =
+            todayDateString();
+
+          const url =
+            `${API_URL}/api/dining/menu?hall=${selectedHall}&date=${date}`;
+
+          console.log(
+            "DINING MENU URL:",
+            url
+          );
+
+          const response =
+            await fetch(
+              url
+            );
+
+          const raw =
+            await response.text();
+
+          let data:
+            unknown;
+
+          try {
+            data =
+              JSON.parse(
+                raw
+              );
+          } catch {
+            throw new Error(
+              `Dining backend returned non-JSON: ${raw.slice(
+                0,
+                100
+              )}`
+            );
+          }
+
+          if (
+            !response.ok
+          ) {
+            const message =
+              typeof data ===
+                "object" &&
+              data !==
+                null &&
+              "error" in
+                data
+                ? String(
+                    (
+                      data as {
+                        error?: unknown;
+                      }
+                    )
+                      .error
+                  )
+                : "Could not load dining menu.";
+
+            throw new Error(
+              message
+            );
+          }
+
+          /*
+           * This supports either:
+           *
+           * res.json(items)
+           *
+           * or:
+           *
+           * res.json({ items })
+           */
+          let rawItems:
+            DiningMenuItem[] =
+            [];
+
+          if (
+            Array.isArray(
+              data
+            )
+          ) {
+            rawItems =
+              data as DiningMenuItem[];
+          } else if (
+            typeof data ===
+              "object" &&
+            data !==
+              null &&
+            "items" in
+              data &&
+            Array.isArray(
+              (
+                data as {
+                  items?: unknown;
+                }
+              ).items
+            )
+          ) {
+            rawItems =
+              (
+                data as {
+                  items:
+                    DiningMenuItem[];
+                }
+              ).items;
+          }
+
+          const items =
+            rawItems.map(
+              (
+                item,
+                index
+              ) => ({
+                ...item,
+
+                id:
+                  `${selectedHall}-${item.meal}-${item.name}-${index}`,
+              })
+            );
+
+          if (
+            !cancelled
+          ) {
+            setMenuItems(
+              items
+            );
+
+            setServings(
+              {}
+            );
+          }
+        } catch (
+          loadError
+        ) {
+          console.error(
+            "DINING MENU ERROR:",
+            loadError
+          );
+
+          if (
+            !cancelled
+          ) {
+            setMenuItems(
+              []
+            );
+
+            setError(
+              loadError instanceof
+                Error
+                ? loadError.message
+                : "Could not load dining menu."
+            );
+          }
+        } finally {
+          if (
+            !cancelled
+          ) {
+            setLoading(
+              false
+            );
+          }
+        }
+      }
+
+      loadMenu();
+
+      return () => {
+        cancelled =
+          true;
+      };
+    },
+
+    [
+      visible,
+      screen,
+      selectedHall,
+    ]
+  );
+
+  const hall =
+    DINING_HALLS.find(
+      (item) =>
+        item.slug ===
+        selectedHall
+    ) ??
+    DINING_HALLS[0];
+
+  function changeServing(
+    id: string,
+    difference: number
+  ) {
+    setServings(
+      (current) => {
+        const currentValue =
+          current[id] ??
+          0;
+
+        const nextValue =
+          Math.max(
+            currentValue +
+              difference,
+
+            0
+          );
+
+        return {
+          ...current,
+
+          [id]:
+            nextValue,
+        };
+      }
+    );
   }
 
+  const selectedItems =
+    menuItems.filter(
+      (item) =>
+        (
+          servings[
+            item.id
+          ] ??
+          0
+        ) > 0
+    );
 
-  function save() {
-    if (!mealType) {
+  const estimatedCalories =
+    selectedItems.reduce(
+      (
+        total,
+        item
+      ) =>
+        total +
+        (item.calories ??
+          0) *
+          (
+            servings[
+              item.id
+            ] ??
+            0
+          ),
+
+      0
+    );
+
+  function estimatedNutrient(
+    key: NutrientKey
+  ) {
+    let total = 0;
+
+    let found =
+      false;
+
+    for (
+      const item
+      of selectedItems
+    ) {
+      const value =
+        getNutrientValue(
+          item,
+          key
+        );
+
+      if (
+        typeof value ===
+        "number"
+      ) {
+        total +=
+          value *
+          (
+            servings[
+              item.id
+            ] ??
+            0
+          );
+
+        found = true;
+      }
+    }
+
+    return found
+      ? total
+      : null;
+  }
+
+  function addSelected() {
+    if (
+      selectedItems.length ===
+      0
+    ) {
+      Alert.alert(
+        "Nothing selected",
+        "Add at least one serving before continuing."
+      );
+
       return;
     }
 
-    onSave({
-      time: "3:10 PM",
-      name: mealType,
-      detail: food,
-      calories:
-        Number(calories) || 0,
-    });
+    const now =
+      Date.now();
 
-    setMealType(null);
+    const logged =
+      selectedItems.map(
+        (
+          item,
+          index
+        ): LoggedDiningItem => ({
+          id:
+            `${now}-${index}`,
+
+          hall:
+            hall.slug,
+
+          hallName:
+            hall.name,
+
+          servings:
+            servings[
+              item.id
+            ] ??
+            1,
+
+          menuItem: {
+            meal:
+              item.meal,
+
+            mealTime:
+              item.mealTime,
+
+            name:
+              item.name,
+
+            calories:
+              item.calories,
+
+            totalFatG:
+              item.totalFatG,
+
+            saturatedFatG:
+              item.saturatedFatG,
+
+            transFatG:
+              item.transFatG,
+
+            proteinG:
+              item.proteinG,
+
+            sugarG:
+              item.sugarG,
+
+            cholesterolMg:
+              item.cholesterolMg,
+
+            sodiumMg:
+              item.sodiumMg,
+
+            carbsG:
+              item.carbsG,
+
+            fiberG:
+              item.fiberG,
+
+            calciumPercent:
+              item.calciumPercent,
+
+            ironPercent:
+              item.ironPercent,
+
+            vitaminAPercent:
+              item.vitaminAPercent,
+
+            vitaminCPercent:
+              item.vitaminCPercent,
+
+            allergens:
+              item.allergens ??
+              [],
+
+            traits:
+              item.traits ??
+              [],
+          },
+        })
+      );
+
+    onAddItems(
+      logged
+    );
+
+    setServings(
+      {}
+    );
   }
 
+  function toggleNutrient(
+    key: NutrientKey
+  ) {
+    const selected =
+      visibleNutrients.includes(
+        key
+      );
+
+    if (
+      selected &&
+      visibleNutrients.length ===
+        1
+    ) {
+      Alert.alert(
+        "Keep one nutrient",
+        "Select at least one nutrition label to display."
+      );
+
+      return;
+    }
+
+    if (
+      selected
+    ) {
+      onChangeVisibleNutrients(
+        visibleNutrients.filter(
+          (item) =>
+            item !== key
+        )
+      );
+    } else {
+      onChangeVisibleNutrients([
+        ...visibleNutrients,
+        key,
+      ]);
+    }
+  }
+
+  function close() {
+    setServings(
+      {}
+    );
+
+    setShowHallOptions(
+      false
+    );
+
+    onClose();
+  }
 
   return (
-
     <Modal
-      visible={visible}
-      transparent
+      visible={
+        visible
+      }
       animationType="slide"
-      onRequestClose={close}
+      presentationStyle="pageSheet"
+      onRequestClose={
+        close
+      }
     >
+      <SafeAreaView
+        style={
+          styles.pickerSafeArea
+        }
+      >
+        {screen ===
+        "nutrients" ? (
+          <ScrollView
+            contentContainerStyle={
+              styles.nutrientPickerContent
+            }
+            showsVerticalScrollIndicator={
+              false
+            }
+          >
+            <View
+              style={
+                styles.modalHandle
+              }
+            />
 
-      <View style={styles.modalOverlay}>
+            <Text
+              style={
+                styles.pickerEyebrow
+              }
+            >
+              CUSTOMIZE TODAY
+            </Text>
 
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={close}
-        />
+            <Text
+              style={
+                styles.pickerTitle
+              }
+            >
+              Choose your nutrients
+            </Text>
 
+            <Text
+              style={
+                styles.pickerDescription
+              }
+            >
+              Select the nutrients you want visible
+              in your Daily Balance card.
+            </Text>
 
-        <View style={styles.modalSheet}>
+            <View
+              style={
+                styles.nutrientChoiceGrid
+              }
+            >
+              {NUTRIENT_OPTIONS.map(
+                (
+                  nutrient
+                ) => {
+                  const selected =
+                    visibleNutrients.includes(
+                      nutrient.key
+                    );
 
-          <View
-            style={styles.sheetHandle}
-          />
+                  const current =
+                    dailyTotals[
+                      nutrient.key
+                    ] ??
+                    null;
 
+                  return (
+                    <Pressable
+                      key={
+                        nutrient.key
+                      }
+                      style={[
+                        styles.nutrientChoice,
 
-          <Text style={styles.eyebrow}>
-            QUICK LOG
-          </Text>
-
-
-          {!mealType ? (
-            <>
-
-              <Text style={styles.sheetTitle}>
-                What did you have?
-              </Text>
-
-              <Text
-                style={
-                  styles.sheetDescription
-                }
-              >
-                Choose a meal to start
-                logging your food.
-              </Text>
-
-
-              {[
-                "Breakfast",
-                "Lunch",
-                "Dinner",
-                "Snack",
-              ].map(
-                (meal, index) => (
-
-                  <Pressable
-                    key={meal}
-                    style={
-                      styles.mealOption
-                    }
-                    onPress={() =>
-                      setMealType(meal)
-                    }
-                  >
-
-                    <View
-                      style={
-                        styles.mealOptionNumber
+                        selected &&
+                          styles.nutrientChoiceSelected,
+                      ]}
+                      onPress={() =>
+                        toggleNutrient(
+                          nutrient.key
+                        )
                       }
                     >
-                      <Text
+                      <View
+                        style={[
+                          styles.checkBox,
+
+                          selected &&
+                            styles.checkBoxSelected,
+                        ]}
+                      >
+                        {selected && (
+                          <Text
+                            style={
+                              styles.checkText
+                            }
+                          >
+                            ✓
+                          </Text>
+                        )}
+                      </View>
+
+                      <View
                         style={
-                          styles.mealOptionNumberText
+                          styles.nutrientChoiceCopy
                         }
                       >
-                        {
-                          [
-                            "07",
-                            "12",
-                            "18",
-                            "•",
-                          ][index]
-                        }
-                      </Text>
-                    </View>
+                        <Text
+                          style={
+                            styles.nutrientChoiceTitle
+                          }
+                        >
+                          {
+                            nutrient.label
+                          }
+                        </Text>
 
-                    <Text
-                      style={
-                        styles.mealOptionText
-                      }
-                    >
-                      {meal}
-                    </Text>
+                        <Text
+                          style={
+                            styles.nutrientChoiceValue
+                          }
+                        >
+                          {formatNutrientValue(
+                            current,
+                            nutrient.unit
+                          )}
 
-                    <Text
-                      style={
-                        styles.mealOptionChevron
-                      }
-                    >
-                      ›
-                    </Text>
+                          {" of "}
 
-                  </Pressable>
-
-                )
+                          {
+                            nutrient.target
+                          }
+                          {
+                            nutrient.unit
+                          }
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                }
               )}
+            </View>
 
-            </>
-          ) : (
-            <>
+            <Pressable
+              style={
+                styles.doneButton
+              }
+              onPress={() => {
+                /*
+                 * If Customize was opened
+                 * directly from the dashboard,
+                 * Done closes the sheet.
+                 *
+                 * If the user opened settings
+                 * while adding food, return
+                 * to the food picker.
+                 */
+                if (
+                  startScreen ===
+                  "nutrients"
+                ) {
+                  close();
+                } else {
+                  setScreen(
+                    "menu"
+                  );
+                }
+              }}
+            >
+              <Text
+                style={
+                  styles.doneButtonText
+                }
+              >
+                Done · Show{" "}
+                {
+                  visibleNutrients.length
+                }{" "}
+                nutrients
+              </Text>
+            </Pressable>
+          </ScrollView>
+        ) : (
+          <View
+            style={
+              styles.menuPickerContainer
+            }
+          >
+            <View
+              style={
+                styles.modalHandle
+              }
+            />
+
+            {/* PICKER HEADER */}
+
+            <View
+              style={
+                styles.pickerHeader
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.pickerEyebrow
+                  }
+                >
+                  UMICH DINING
+                </Text>
+
+                <Text
+                  style={
+                    styles.pickerTitle
+                  }
+                >
+                  Add dining items
+                </Text>
+              </View>
 
               <Pressable
                 onPress={() =>
-                  setMealType(null)
+                  setScreen(
+                    "nutrients"
+                  )
                 }
               >
-
                 <Text
                   style={
-                    styles.sheetBack
+                    styles.configureText
                   }
                 >
-                  ← Back
+                  Nutrients
                 </Text>
-
               </Pressable>
+            </View>
 
+            {/* DINING HALL */}
 
-              <Text style={styles.sheetTitle}>
-                Log {mealType.toLowerCase()}
+            <Text
+              style={
+                styles.inputLabel
+              }
+            >
+              DINING HALL
+            </Text>
+
+            <Pressable
+              style={
+                styles.hallSelector
+              }
+              onPress={() =>
+                setShowHallOptions(
+                  (
+                    current
+                  ) =>
+                    !current
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.hallPin
+                }
+              >
+                ◎
               </Text>
 
               <Text
                 style={
-                  styles.sheetDescription
+                  styles.hallName
                 }
               >
-                Add what you ate and we'll
-                estimate the nutrition.
+                {
+                  hall.name
+                }
               </Text>
 
-
-              <Text style={styles.inputLabel}>
-                FOOD OR MEAL
-              </Text>
-
-              <TextInput
-                style={styles.modalInput}
-                value={food}
-                onChangeText={setFood}
-              />
-
-
-              <Text style={styles.inputLabel}>
-                CALORIES
-              </Text>
-
-              <TextInput
-                style={styles.modalInput}
-                value={calories}
-                onChangeText={setCalories}
-                keyboardType="number-pad"
-              />
-
-
-              <Pressable
-                style={styles.saveMealButton}
-                onPress={save}
+              <Text
+                style={
+                  styles.hallChevron
+                }
               >
+                {showHallOptions
+                  ? "⌃"
+                  : "⌄"}
+              </Text>
+            </Pressable>
+
+            {showHallOptions && (
+              <View
+                style={
+                  styles.hallOptions
+                }
+              >
+                {DINING_HALLS.map(
+                  (
+                    diningHall
+                  ) => (
+                    <Pressable
+                      key={
+                        diningHall.slug
+                      }
+                      style={
+                        styles.hallOption
+                      }
+                      onPress={() => {
+                        setSelectedHall(
+                          diningHall.slug
+                        );
+
+                        setShowHallOptions(
+                          false
+                        );
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.hallOptionText,
+
+                          diningHall.slug ===
+                            selectedHall &&
+                            styles.hallOptionTextSelected,
+                        ]}
+                      >
+                        {
+                          diningHall.name
+                        }
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+              </View>
+            )}
+
+            <Text
+              style={
+                styles.menuStatus
+              }
+            >
+              ● Today's menu from Michigan Dining
+            </Text>
+
+            {/* MENU */}
+
+            <View
+              style={
+                styles.availableHeader
+              }
+            >
+              <Text
+                style={
+                  styles.availableHeaderText
+                }
+              >
+                TODAY'S AVAILABLE ITEMS
+              </Text>
+
+              <Text
+                style={
+                  styles.availableHeaderText
+                }
+              >
+                SERVINGS
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.menuListShell
+              }
+            >
+              {loading ? (
+                <View
+                  style={
+                    styles.loadingState
+                  }
+                >
+                  <ActivityIndicator />
+
+                  <Text
+                    style={
+                      styles.loadingText
+                    }
+                  >
+                    Loading dining menu...
+                  </Text>
+                </View>
+              ) : error ? (
+                <View
+                  style={
+                    styles.loadingState
+                  }
+                >
+                  <Text
+                    style={
+                      styles.errorText
+                    }
+                  >
+                    {
+                      error
+                    }
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  showsVerticalScrollIndicator={
+                    true
+                  }
+                >
+                  {menuItems.map(
+                    (
+                      item
+                    ) => {
+                      const count =
+                        servings[
+                          item.id
+                        ] ??
+                        0;
+
+                      return (
+                        <View
+                          key={
+                            item.id
+                          }
+                          style={
+                            styles.menuItemRow
+                          }
+                        >
+                          <View
+                            style={
+                              styles.menuItemStripe
+                            }
+                          />
+
+                          <View
+                            style={
+                              styles.menuItemCopy
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.menuItemName
+                              }
+                            >
+                              {
+                                item.name
+                              }
+                            </Text>
+
+                            <View
+                              style={
+                                styles.menuItemBadge
+                              }
+                            >
+                              <Text
+                                style={
+                                  styles.menuItemBadgeText
+                                }
+                              >
+                                {
+                                  item.meal
+                                }
+
+                                {" · "}
+
+                                {item.calories ??
+                                  "—"}{" "}
+                                kcal
+                              </Text>
+                            </View>
+
+                            {item
+                              .mealTime && (
+                              <Text
+                                style={
+                                  styles.mealTimeText
+                                }
+                              >
+                                {
+                                  item.mealTime
+                                }
+                              </Text>
+                            )}
+                          </View>
+
+                          <ServingControl
+                            value={
+                              count
+                            }
+                            onDecrease={() =>
+                              changeServing(
+                                item.id,
+                                -1
+                              )
+                            }
+                            onIncrease={() =>
+                              changeServing(
+                                item.id,
+                                1
+                              )
+                            }
+                          />
+                        </View>
+                      );
+                    }
+                  )}
+                </ScrollView>
+              )}
+            </View>
+
+            {/* ESTIMATED NUTRITION */}
+
+            <View
+              style={
+                styles.estimatedCard
+              }
+            >
+              <View
+                style={
+                  styles.estimatedHeader
+                }
+              >
+                <Text
+                  style={
+                    styles.estimatedLabel
+                  }
+                >
+                  ✦ ESTIMATED NUTRITION
+                </Text>
 
                 <Text
                   style={
-                    styles.saveMealButtonText
+                    styles.estimatedCalories
                   }
                 >
-                  ✓ Add to today's log
+                  {estimatedCalories.toLocaleString()} kcal
                 </Text>
+              </View>
 
-              </Pressable>
+              <View
+                style={
+                  styles.estimatedNutrients
+                }
+              >
+                {visibleNutrients
+                  .slice(
+                    0,
+                    6
+                  )
+                  .map(
+                    (
+                      key
+                    ) => {
+                      const config =
+                        NUTRIENT_OPTIONS.find(
+                          (
+                            option
+                          ) =>
+                            option.key ===
+                            key
+                        );
 
-            </>
-          )}
+                      if (
+                        !config
+                      ) {
+                        return null;
+                      }
 
-        </View>
+                      const value =
+                        estimatedNutrient(
+                          key
+                        );
 
-      </View>
+                      return (
+                        <View
+                          key={
+                            key
+                          }
+                          style={
+                            styles.estimatedNutrient
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.estimatedNutrientLabel
+                            }
+                          >
+                            {
+                              config.label
+                            }
+                          </Text>
 
+                          <Text
+                            style={
+                              styles.estimatedNutrientValue
+                            }
+                          >
+                            {formatNutrientValue(
+                              value,
+                              config.unit
+                            )}
+                          </Text>
+                        </View>
+                      );
+                    }
+                  )}
+              </View>
+
+              <Text
+                style={
+                  styles.estimatedHelp
+                }
+              >
+                Totals update automatically from serving
+                amounts and Michigan Dining nutrition data.
+              </Text>
+            </View>
+
+            {/* ADD BUTTON */}
+
+            <Pressable
+              style={[
+                styles.addSelectedButton,
+
+                selectedItems.length ===
+                  0 &&
+                  styles.addSelectedButtonDisabled,
+              ]}
+              disabled={
+                selectedItems.length ===
+                0
+              }
+              onPress={
+                addSelected
+              }
+            >
+              <Text
+                style={
+                  styles.addSelectedButtonText
+                }
+              >
+                Add{" "}
+                {selectedItems.length}{" "}
+                {selectedItems.length ===
+                1
+                  ? "item"
+                  : "items"}{" "}
+                to today's log
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={
+                styles.closePickerButton
+              }
+              onPress={
+                close
+              }
+            >
+              <Text
+                style={
+                  styles.closePickerText
+                }
+              >
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </SafeAreaView>
     </Modal>
-
   );
 }
+
 /* ============================================ */
 /* STYLES                                       */
 /* ============================================ */
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F8F8F4",
-  },
+const styles =
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
 
-  screen: {
-    flex: 1,
-    backgroundColor: "#F8F8F4",
-  },
+      backgroundColor:
+        "#F8F8F4",
+    },
 
-  scroll: {
-    flex: 1,
-  },
+    screen: {
+      flex: 1,
 
-  scrollContent: {
-    paddingHorizontal: 22,
-  },
+      backgroundColor:
+        "#F8F8F4",
+    },
 
+    scroll: {
+      flex: 1,
+    },
 
-  /* ========================================== */
-  /* HEADER                                     */
-  /* ========================================== */
+    scrollContent: {
+      paddingHorizontal:
+        22,
+    },
 
-  topbar: {
-    height: 68,
+    /* HEADER */
 
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+    topbar: {
+      height: 68,
 
-  brand: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
+      flexDirection:
+        "row",
 
-  brandMark: {
-    width: 28,
-    height: 28,
+      alignItems:
+        "center",
 
-    alignItems: "center",
-    justifyContent: "center",
+      justifyContent:
+        "space-between",
+    },
 
-    borderRadius: 7,
+    brand: {
+      flexDirection:
+        "row",
 
-    backgroundColor: colors.navy,
+      alignItems:
+        "center",
 
-    transform: [
-      {
-        rotate: "-4deg",
-      },
-    ],
-  },
+      gap: 9,
+    },
 
-  brandM: {
-    color: colors.maize,
+    brandMark: {
+      width: 28,
 
-    fontSize: 15,
-    fontWeight: "900",
-  },
+      height: 28,
 
-  brandText: {
-    color: colors.navy,
+      borderRadius: 7,
 
-    fontSize: 21,
-    fontWeight: "800",
+      backgroundColor:
+        colors.navy,
 
-    letterSpacing: -0.8,
-  },
+      alignItems:
+        "center",
 
-  notificationButton: {
-    width: 38,
-    height: 38,
+      justifyContent:
+        "center",
 
-    alignItems: "center",
-    justifyContent: "center",
+      transform: [
+        {
+          rotate:
+            "-4deg",
+        },
+      ],
+    },
 
-    borderWidth: 1,
-    borderColor: "#E0E2E4",
+    brandM: {
+      color:
+        colors.maize,
 
-    borderRadius: 19,
+      fontSize: 15,
 
-    backgroundColor: "#FFFFFF",
-  },
+      fontWeight:
+        "900",
+    },
 
-  notificationIcon: {
-    color: colors.navy,
+    brandText: {
+      color:
+        colors.navy,
 
-    fontSize: 18,
-    fontWeight: "700",
-  },
+      fontSize: 21,
 
-  notificationDot: {
-    position: "absolute",
+      fontWeight:
+        "800",
 
-    top: 8,
-    right: 8,
+      letterSpacing:
+        -0.8,
+    },
 
-    width: 6,
-    height: 6,
+    notificationButton: {
+      width: 38,
 
-    borderRadius: 3,
+      height: 38,
 
-    backgroundColor: "#D7B900",
-  },
+      borderWidth: 1,
 
+      borderColor:
+        "#E0E2E4",
 
-  /* ========================================== */
-  /* WELCOME                                    */
-  /* ========================================== */
+      borderRadius: 19,
 
-  welcome: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+      backgroundColor:
+        "#FFFFFF",
 
-    paddingTop: 20,
-    paddingBottom: 23,
-  },
+      alignItems:
+        "center",
 
-  welcomeCopy: {
-    flex: 1,
-  },
+      justifyContent:
+        "center",
+    },
 
-  date: {
-    color: "#7B828B",
+    notificationIcon: {
+      color:
+        colors.navy,
 
-    fontSize: 8,
-    fontWeight: "700",
+      fontSize: 18,
+    },
 
-    letterSpacing: 1.25,
-  },
+    notificationDot: {
+      position:
+        "absolute",
 
-  welcomeTitle: {
-    marginTop: 5,
+      top: 8,
 
-    color: colors.navy,
+      right: 8,
 
-    fontSize: 28,
-    lineHeight: 33,
+      width: 6,
 
-    fontWeight: "800",
+      height: 6,
 
-    letterSpacing: -1,
-  },
+      borderRadius: 3,
 
-  welcomeDescription: {
-    marginTop: 4,
+      backgroundColor:
+        "#D7B900",
+    },
 
-    color: colors.muted,
+    /* WELCOME */
 
-    fontSize: 11,
-  },
+    welcome: {
+      flexDirection:
+        "row",
 
-  streak: {
-    width: 67,
-    height: 67,
+      alignItems:
+        "center",
 
-    alignItems: "center",
-    justifyContent: "center",
+      justifyContent:
+        "space-between",
 
-    borderWidth: 1,
-    borderColor: "#E4D991",
+      paddingTop: 20,
 
-    borderRadius: 34,
+      paddingBottom: 23,
+    },
 
-    backgroundColor: "#FFF9D9",
-  },
+    welcomeCopy: {
+      flex: 1,
+    },
 
-  streakNumber: {
-    color: colors.navy,
+    date: {
+      color:
+        "#7B828B",
 
-    fontSize: 20,
-    fontWeight: "800",
-  },
+      fontSize: 8,
 
-  streakLabel: {
-    marginTop: -1,
+      fontWeight:
+        "700",
 
-    color: "#827850",
+      letterSpacing:
+        1.25,
+    },
 
-    fontSize: 7,
-    fontWeight: "600",
-  },
+    welcomeTitle: {
+      marginTop: 5,
 
+      color:
+        colors.navy,
 
-  /* ========================================== */
-  /* ENERGY CARD                                */
-  /* ========================================== */
+      fontSize: 28,
 
-  calorieCard: {
-    minHeight: 180,
+      lineHeight: 33,
 
-    flexDirection: "row",
-    alignItems: "center",
+      fontWeight:
+        "800",
 
-    padding: 18,
+      letterSpacing:
+        -1,
+    },
 
-    borderRadius: 18,
+    welcomeDescription: {
+      marginTop: 4,
 
-    backgroundColor: colors.navy,
-  },
+      color:
+        colors.muted,
 
-  calorieCopy: {
-    flex: 1,
+      fontSize: 11,
+    },
 
-    paddingRight: 12,
-  },
+    streak: {
+      width: 67,
 
-  statusPill: {
-    alignSelf: "flex-start",
+      height: 67,
 
-    flexDirection: "row",
-    alignItems: "center",
+      borderWidth: 1,
 
-    gap: 5,
+      borderColor:
+        "#E4D991",
 
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+      borderRadius: 34,
 
-    borderRadius: 8,
+      backgroundColor:
+        "#FFF9D9",
 
-    backgroundColor: "#304158",
-  },
+      alignItems:
+        "center",
 
-  statusPillDot: {
-    width: 6,
-    height: 6,
+      justifyContent:
+        "center",
+    },
 
-    borderRadius: 3,
+    streakNumber: {
+      color:
+        colors.navy,
 
-    backgroundColor: "#8BC7A5",
-  },
+      fontSize: 20,
 
-  statusPillText: {
-    color: "#B9E2CA",
+      fontWeight:
+        "800",
+    },
 
-    fontSize: 7,
-    fontWeight: "800",
+    streakLabel: {
+      color:
+        "#827850",
 
-    letterSpacing: 0.8,
-  },
+      fontSize: 7,
+    },
 
-  cardTitle: {
-    marginTop: 12,
+    /* CALORIES */
 
-    color: "#FFFFFF",
+    calorieCard: {
+      minHeight: 180,
 
-    fontSize: 20,
-    fontWeight: "800",
+      flexDirection:
+        "row",
 
-    letterSpacing: -0.4,
-  },
+      alignItems:
+        "center",
 
-  calorieDescription: {
-    marginTop: 6,
+      padding: 18,
 
-    maxWidth: 190,
+      borderRadius: 18,
 
-    color: "#C7CFDA",
+      backgroundColor:
+        colors.navy,
+    },
 
-    fontSize: 10,
-    lineHeight: 15,
-  },
+    calorieCopy: {
+      flex: 1,
 
-  calorieDescriptionStrong: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-  },
+      paddingRight: 12,
+    },
 
-  primaryButton: {
-    alignSelf: "flex-start",
+    statusPill: {
+      alignSelf:
+        "flex-start",
 
-    flexDirection: "row",
-    alignItems: "center",
+      flexDirection:
+        "row",
 
-    gap: 5,
+      alignItems:
+        "center",
 
-    marginTop: 15,
+      gap: 5,
 
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+      paddingHorizontal:
+        8,
 
-    borderRadius: 10,
+      paddingVertical: 5,
 
-    backgroundColor: colors.maize,
-  },
+      borderRadius: 8,
 
-  primaryButtonPlus: {
-    color: colors.navy,
+      backgroundColor:
+        "#304158",
+    },
 
-    fontSize: 15,
-    fontWeight: "700",
-  },
+    statusPillDot: {
+      width: 6,
 
-  primaryButtonText: {
-    color: colors.navy,
+      height: 6,
 
-    fontSize: 9,
-    fontWeight: "800",
-  },
+      borderRadius: 3,
 
+      backgroundColor:
+        "#8BC7A5",
+    },
 
-  /* ========================================== */
-  /* CALORIE RING                               */
-  /* ========================================== */
+    statusPillText: {
+      color:
+        "#B9E2CA",
 
-  ringOuter: {
-    width: 126,
-    height: 126,
+      fontSize: 7,
 
-    alignItems: "center",
-    justifyContent: "center",
+      fontWeight:
+        "800",
+    },
 
-    borderWidth: 9,
-    borderColor: colors.maize,
+    cardTitle: {
+      marginTop: 12,
 
-    borderRadius: 63,
+      color:
+        "#FFFFFF",
 
-    backgroundColor: "#192A40",
-  },
+      fontSize: 20,
 
-  ringInner: {
-    width: 96,
-    height: 96,
+      fontWeight:
+        "800",
+    },
 
-    alignItems: "center",
-    justifyContent: "center",
+    calorieDescription: {
+      marginTop: 6,
 
-    borderRadius: 48,
+      maxWidth: 190,
 
-    backgroundColor: colors.navy,
-  },
+      color:
+        "#C7CFDA",
 
-  ringNumber: {
-    color: "#FFFFFF",
+      fontSize: 10,
 
-    fontSize: 20,
-    fontWeight: "800",
+      lineHeight: 15,
+    },
 
-    letterSpacing: -0.5,
-  },
+    calorieDescriptionStrong: {
+      color:
+        "#FFFFFF",
 
-  ringLabel: {
-    marginTop: 2,
+      fontWeight:
+        "800",
+    },
 
-    color: "#AEB9C7",
+    primaryButton: {
+      alignSelf:
+        "flex-start",
 
-    fontSize: 7,
-  },
+      flexDirection:
+        "row",
 
-  ringPercent: {
-    marginTop: 4,
+      alignItems:
+        "center",
 
-    color: colors.maize,
+      gap: 5,
 
-    fontSize: 7,
-    fontWeight: "700",
-  },
+      marginTop: 15,
 
+      paddingHorizontal:
+        12,
 
-  /* ========================================== */
-  /* SHARED CARD / HEADING                      */
-  /* ========================================== */
+      paddingVertical: 9,
 
-  sectionHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+      borderRadius: 10,
 
-  eyebrow: {
-    color: "#7A818A",
+      backgroundColor:
+        colors.maize,
+    },
 
-    fontSize: 8,
-    fontWeight: "700",
+    primaryButtonPlus: {
+      color:
+        colors.navy,
 
-    letterSpacing: 1.15,
-  },
+      fontSize: 15,
 
-  sectionHeadingTitle: {
-    marginTop: 3,
+      fontWeight:
+        "800",
+    },
 
-    color: colors.navy,
+    primaryButtonText: {
+      color:
+        colors.navy,
 
-    fontSize: 17,
-    fontWeight: "800",
+      fontSize: 9,
 
-    letterSpacing: -0.3,
-  },
+      fontWeight:
+        "800",
+    },
 
-  textButton: {
-    color: colors.blue,
+    /* RING */
 
-    fontSize: 9,
-    fontWeight: "700",
-  },
+    ringOuter: {
+      width: 126,
 
+      height: 126,
 
-  /* ========================================== */
-  /* NUTRIENTS                                  */
-  /* ========================================== */
+      borderWidth: 9,
 
-  nutrientCard: {
-    marginTop: 16,
+      borderColor:
+        colors.maize,
 
-    padding: 17,
+      borderRadius: 63,
 
-    borderWidth: 1,
-    borderColor: "#E0E2E4",
+      backgroundColor:
+        "#192A40",
 
-    borderRadius: 17,
+      alignItems:
+        "center",
 
-    backgroundColor: "#FFFFFF",
-  },
+      justifyContent:
+        "center",
+    },
 
-  nutrientGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    ringInner: {
+      width: 96,
 
-    justifyContent: "space-between",
+      height: 96,
 
-    marginTop: 17,
-  },
+      borderRadius: 48,
 
-  nutrient: {
-    width: "47%",
+      backgroundColor:
+        colors.navy,
 
-    marginBottom: 15,
-  },
+      alignItems:
+        "center",
 
-  nutrientRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+      justifyContent:
+        "center",
+    },
 
-    marginBottom: 6,
-  },
+    ringNumber: {
+      color:
+        "#FFFFFF",
 
-  nutrientLabel: {
-    color: "#606873",
+      fontSize: 20,
 
-    fontSize: 8,
-    fontWeight: "600",
-  },
+      fontWeight:
+        "800",
+    },
 
-  nutrientValue: {
-    color: colors.navy,
+    ringLabel: {
+      marginTop: 2,
 
-    fontSize: 8,
-    fontWeight: "800",
-  },
+      color:
+        "#AEB9C7",
 
-  nutrientTarget: {
-    color: "#9AA0A7",
+      fontSize: 7,
+    },
 
-    fontWeight: "500",
-  },
+    ringPercent: {
+      marginTop: 4,
 
-  progressTrack: {
-    height: 5,
+      color:
+        colors.maize,
 
-    overflow: "hidden",
+      fontSize: 7,
 
-    borderRadius: 3,
+      fontWeight:
+        "700",
+    },
 
-    backgroundColor: "#ECEEF0",
-  },
+    /* SHARED */
 
-  progressFill: {
-    height: "100%",
+    sectionHeading: {
+      flexDirection:
+        "row",
 
-    borderRadius: 3,
+      alignItems:
+        "center",
 
-    backgroundColor: colors.navy,
-  },
+      justifyContent:
+        "space-between",
+    },
 
+    eyebrow: {
+      color:
+        "#7A818A",
 
-  /* ========================================== */
-  /* SMART RECOMMENDATION                       */
-  /* ========================================== */
+      fontSize: 8,
 
-  recommendationCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+      fontWeight:
+        "700",
 
-    gap: 11,
+      letterSpacing:
+        1.15,
+    },
 
-    marginTop: 16,
+    sectionHeadingTitle: {
+      marginTop: 3,
 
-    padding: 16,
+      color:
+        colors.navy,
 
-    borderWidth: 1,
-    borderColor: "#E3D892",
+      fontSize: 17,
 
-    borderRadius: 17,
+      fontWeight:
+        "800",
+    },
 
-    backgroundColor: "#FFFBE6",
-  },
+    textButton: {
+      color:
+        colors.blue,
 
-  recommendationIcon: {
-    width: 39,
-    height: 39,
+      fontSize: 9,
 
-    alignItems: "center",
-    justifyContent: "center",
+      fontWeight:
+        "700",
+    },
 
-    borderRadius: 12,
+    /* NUTRIENT CARD */
 
-    backgroundColor: colors.maize,
-  },
+    nutrientCard: {
+      marginTop: 16,
 
-  recommendationSparkle: {
-    color: colors.navy,
+      padding: 17,
 
-    fontSize: 18,
-    fontWeight: "900",
-  },
+      borderWidth: 1,
 
-  recommendationCopy: {
-    flex: 1,
-  },
+      borderColor:
+        "#E0E2E4",
 
-  recommendationTitle: {
-    marginTop: 3,
+      borderRadius: 17,
 
-    color: colors.navy,
+      backgroundColor:
+        "#FFFFFF",
+    },
 
-    fontSize: 14,
-    fontWeight: "800",
-  },
+    nutrientGrid: {
+      flexDirection:
+        "row",
 
-  recommendationDescription: {
-    marginTop: 5,
+      flexWrap:
+        "wrap",
 
-    color: "#6C6858",
+      justifyContent:
+        "space-between",
 
-    fontSize: 9,
-    lineHeight: 14,
-  },
+      marginTop: 17,
+    },
 
-  recommendationMeta: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    nutrient: {
+      width: "47%",
 
-    gap: 12,
+      marginBottom: 15,
+    },
 
-    marginTop: 9,
-  },
+    nutrientRow: {
+      flexDirection:
+        "row",
 
-  metaText: {
-    color: "#716B51",
+      alignItems:
+        "center",
 
-    fontSize: 8,
-    fontWeight: "600",
-  },
+      justifyContent:
+        "space-between",
 
-  planButton: {
-    alignSelf: "center",
+      marginBottom: 6,
+    },
 
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    nutrientLabel: {
+      color:
+        "#606873",
 
-    borderWidth: 1,
-    borderColor: "#D4C76F",
+      fontSize: 8,
 
-    borderRadius: 9,
+      fontWeight:
+        "600",
+    },
 
-    backgroundColor: "#FFFFFF",
-  },
+    nutrientValue: {
+      color:
+        colors.navy,
 
-  planButtonSelected: {
-    borderColor: "#B9D5C4",
+      fontSize: 8,
 
-    backgroundColor: "#EEF7F1",
-  },
+      fontWeight:
+        "800",
+    },
 
-  planButtonText: {
-    color: "#756200",
+    nutrientTarget: {
+      color:
+        "#9AA0A7",
 
-    fontSize: 8,
-    fontWeight: "700",
-  },
+      fontWeight:
+        "500",
+    },
 
-  planButtonTextSelected: {
-    color: colors.green,
-  },
+    progressTrack: {
+      height: 5,
 
+      overflow:
+        "hidden",
 
-  /* ========================================== */
-  /* MEALS                                      */
-  /* ========================================== */
+      borderRadius: 3,
 
-  mealsSection: {
-    marginTop: 23,
-  },
+      backgroundColor:
+        "#ECEEF0",
+    },
 
-  addButton: {
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    progressFill: {
+      height: "100%",
 
-    borderWidth: 1,
-    borderColor: "#D9DCDF",
+      borderRadius: 3,
 
-    borderRadius: 9,
+      backgroundColor:
+        colors.navy,
+    },
 
-    backgroundColor: "#FFFFFF",
-  },
+    /* RECOMMENDATION */
 
-  addButtonText: {
-    color: colors.navy,
+    recommendationCard: {
+      flexDirection:
+        "row",
 
-    fontSize: 9,
-    fontWeight: "700",
-  },
+      alignItems:
+        "flex-start",
 
-  mealList: {
-    overflow: "hidden",
+      gap: 11,
 
-    marginTop: 11,
+      marginTop: 16,
 
-    borderWidth: 1,
-    borderColor: "#E0E2E4",
+      padding: 16,
 
-    borderRadius: 15,
+      borderWidth: 1,
 
-    backgroundColor: "#FFFFFF",
-  },
+      borderColor:
+        "#E3D892",
 
-  meal: {
-    minHeight: 78,
+      borderRadius: 17,
 
-    flexDirection: "row",
-    alignItems: "center",
+      backgroundColor:
+        "#FFFBE6",
+    },
 
-    gap: 11,
+    recommendationIcon: {
+      width: 39,
 
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+      height: 39,
 
-    borderBottomWidth: 1,
-    borderBottomColor: "#ECEDEF",
-  },
+      borderRadius: 12,
 
-  mealArt: {
-    width: 40,
-    height: 40,
+      backgroundColor:
+        colors.maize,
 
-    alignItems: "center",
-    justifyContent: "center",
+      alignItems:
+        "center",
 
-    borderRadius: 11,
+      justifyContent:
+        "center",
+    },
 
-    backgroundColor: "#FFF5C8",
-  },
+    recommendationSparkle: {
+      color:
+        colors.navy,
 
-  mealArtText: {
-    color: colors.navy,
+      fontSize: 18,
 
-    fontSize: 17,
-    fontWeight: "800",
-  },
+      fontWeight:
+        "900",
+    },
 
-  mealCopy: {
-    flex: 1,
-  },
+    recommendationCopy: {
+      flex: 1,
+    },
 
-  mealTime: {
-    color: "#949AA1",
+    recommendationTitle: {
+      marginTop: 3,
 
-    fontSize: 7,
-    fontWeight: "600",
-  },
+      color:
+        colors.navy,
 
-  mealName: {
-    marginTop: 2,
+      fontSize: 14,
 
-    color: colors.navy,
+      fontWeight:
+        "800",
+    },
 
-    fontSize: 11,
-    fontWeight: "800",
-  },
+    recommendationDescription: {
+      marginTop: 5,
 
-  mealDetail: {
-    marginTop: 2,
+      color:
+        "#6C6858",
 
-    color: colors.muted,
+      fontSize: 9,
 
-    fontSize: 8,
-  },
+      lineHeight: 14,
+    },
 
-  mealCalories: {
-    alignItems: "flex-end",
-  },
+    planButton: {
+      alignSelf:
+        "center",
 
-  mealCaloriesNumber: {
-    color: colors.navy,
+      width: 34,
 
-    fontSize: 12,
-    fontWeight: "800",
-  },
+      height: 34,
 
-  mealCaloriesLabel: {
-    color: "#999FA6",
+      borderWidth: 1,
 
-    fontSize: 7,
-  },
+      borderColor:
+        "#D4C76F",
 
-  chevron: {
-    marginLeft: 3,
+      borderRadius: 9,
 
-    color: "#A0A5AB",
+      backgroundColor:
+        "#FFFFFF",
 
-    fontSize: 21,
-  },
+      alignItems:
+        "center",
 
+      justifyContent:
+        "center",
+    },
 
-  /* ========================================== */
-  /* PLANNED PHOTON MEAL                        */
-  /* ========================================== */
+    planButtonSelected: {
+      borderColor:
+        "#B9D5C4",
 
-  plannedMeal: {
-    flexDirection: "row",
-    alignItems: "center",
+      backgroundColor:
+        "#EEF7F1",
+    },
 
-    gap: 11,
+    planButtonText: {
+      color:
+        colors.navy,
 
-    padding: 13,
+      fontSize: 14,
 
-    backgroundColor: "#FFFBE6",
-  },
+      fontWeight:
+        "800",
+    },
 
-  plannedMealIcon: {
-    width: 40,
-    height: 40,
+    /* TODAY LOG */
 
-    alignItems: "center",
-    justifyContent: "center",
+    mealsSection: {
+      marginTop: 23,
+    },
 
-    borderRadius: 11,
+    addButton: {
+      paddingHorizontal:
+        11,
 
-    backgroundColor: colors.maize,
-  },
+      paddingVertical: 7,
 
-  plannedMealCopy: {
-    flex: 1,
-  },
+      borderWidth: 1,
 
-  plannedMealEyebrow: {
-    color: "#81774C",
+      borderColor:
+        "#D9DCDF",
 
-    fontSize: 7,
-    fontWeight: "700",
-  },
+      borderRadius: 9,
 
-  plannedMealTitle: {
-    marginTop: 2,
+      backgroundColor:
+        "#FFFFFF",
+    },
 
-    color: colors.navy,
+    addButtonText: {
+      color:
+        colors.navy,
 
-    fontSize: 11,
-    fontWeight: "800",
-  },
+      fontSize: 9,
 
-  plannedMealDescription: {
-    marginTop: 2,
+      fontWeight:
+        "700",
+    },
 
-    color: "#756F59",
+    emptyMealCard: {
+      marginTop: 11,
 
-    fontSize: 8,
-  },
+      padding: 22,
 
-  bottomSpacer: {
-    height: 100,
-  },
+      borderWidth: 1,
 
+      borderColor:
+        "#E0E2E4",
 
-  /* ========================================== */
-  /* QUICK LOG MODAL                            */
-  /* ========================================== */
+      borderRadius: 15,
 
-  modalOverlay: {
-    flex: 1,
+      backgroundColor:
+        "#FFFFFF",
 
-    justifyContent: "flex-end",
+      alignItems:
+        "center",
+    },
 
-    backgroundColor: "rgba(8, 21, 37, 0.34)",
-  },
+    emptyMealTitle: {
+      color:
+        colors.navy,
 
-  modalBackdrop: {
-  position: "absolute",
-  top: 0,
-  bottom: 0,
-  left: 0,
-  right: 0,
-},
+      fontSize: 11,
 
-  modalSheet: {
-    paddingHorizontal: 22,
-    paddingTop: 10,
-    paddingBottom: 32,
+      fontWeight:
+        "800",
+    },
 
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    emptyMealDescription: {
+      marginTop: 5,
 
-    backgroundColor: "#FBFBF8",
-  },
+      maxWidth: 240,
 
-  sheetHandle: {
-    width: 38,
-    height: 4,
+      color:
+        colors.muted,
 
-    alignSelf: "center",
+      fontSize: 8,
 
-    marginBottom: 22,
+      lineHeight: 13,
 
-    borderRadius: 2,
+      textAlign:
+        "center",
+    },
 
-    backgroundColor: "#D4D7DA",
-  },
+    mealList: {
+      overflow:
+        "hidden",
 
-  sheetTitle: {
-    marginTop: 5,
+      marginTop: 11,
 
-    color: colors.navy,
+      borderWidth: 1,
 
-    fontSize: 23,
-    fontWeight: "800",
+      borderColor:
+        "#E0E2E4",
 
-    letterSpacing: -0.6,
-  },
+      borderRadius: 15,
 
-  sheetDescription: {
-    marginTop: 5,
-    marginBottom: 18,
+      backgroundColor:
+        "#FFFFFF",
+    },
 
-    color: colors.muted,
+    loggedFoodRow: {
+      minHeight: 88,
 
-    fontSize: 10,
-    lineHeight: 15,
-  },
+      flexDirection:
+        "row",
 
-  mealOption: {
-    height: 55,
+      alignItems:
+        "center",
 
-    flexDirection: "row",
-    alignItems: "center",
+      paddingVertical: 12,
 
-    gap: 11,
+      paddingRight: 12,
 
-    paddingHorizontal: 12,
+      borderBottomWidth: 1,
 
-    borderBottomWidth: 1,
-    borderBottomColor: "#E6E8EA",
-  },
+      borderBottomColor:
+        "#ECEDEF",
+    },
 
-  mealOptionNumber: {
-    width: 31,
-    height: 31,
+    loggedFoodStripe: {
+      width: 3,
 
-    alignItems: "center",
-    justifyContent: "center",
+      alignSelf:
+        "stretch",
 
-    borderRadius: 9,
+      marginRight: 12,
 
-    backgroundColor: "#FFF3B5",
-  },
+      backgroundColor:
+        colors.maize,
+    },
 
-  mealOptionNumberText: {
-    color: colors.navy,
+    loggedFoodCopy: {
+      flex: 1,
 
-    fontSize: 9,
-    fontWeight: "800",
-  },
+      paddingRight: 8,
+    },
 
-  mealOptionText: {
-    flex: 1,
+    loggedFoodName: {
+      color:
+        colors.navy,
 
-    color: colors.navy,
+      fontSize: 11,
 
-    fontSize: 11,
-    fontWeight: "700",
-  },
+      fontWeight:
+        "800",
+    },
 
-  mealOptionChevron: {
-    color: "#A0A5AB",
+    loggedFoodMeta: {
+      marginTop: 5,
 
-    fontSize: 21,
-  },
+      color:
+        "#65707A",
 
-  sheetBack: {
-    marginBottom: 12,
+      fontSize: 7,
 
-    color: colors.blue,
+      lineHeight: 11,
+    },
 
-    fontSize: 10,
-    fontWeight: "700",
-  },
+    allergenText: {
+      marginTop: 4,
 
-  inputLabel: {
-    marginTop: 12,
-    marginBottom: 6,
+      color:
+        "#9A625D",
 
-    color: "#606873",
+      fontSize: 6,
 
-    fontSize: 8,
-    fontWeight: "700",
+      lineHeight: 10,
+    },
 
-    letterSpacing: 1,
-  },
+    bottomSpacer: {
+      height: 100,
+    },
 
-  modalInput: {
-    height: 44,
+    /* SERVINGS */
 
-    paddingHorizontal: 12,
+    servingControl: {
+      flexDirection:
+        "row",
 
-    borderWidth: 1,
-    borderColor: "#D8DBDE",
+      alignItems:
+        "center",
 
-    borderRadius: 10,
+      gap: 7,
+    },
 
-    backgroundColor: "#FFFFFF",
+    servingButton: {
+      width: 30,
 
-    color: colors.navy,
+      height: 30,
 
-    fontSize: 10,
-  },
+      borderWidth: 1,
 
-  saveMealButton: {
-    height: 45,
+      borderColor:
+        "#D8DDE2",
 
-    alignItems: "center",
-    justifyContent: "center",
+      borderRadius: 8,
 
-    marginTop: 20,
+      backgroundColor:
+        "#FFFFFF",
 
-    borderRadius: 11,
+      alignItems:
+        "center",
 
-    backgroundColor: colors.navy,
-  },
+      justifyContent:
+        "center",
+    },
 
-  saveMealButtonText: {
-    color: "#FFFFFF",
+    servingButtonDisabled: {
+      opacity: 0.4,
+    },
 
-    fontSize: 10,
-    fontWeight: "700",
-  },
-});
+    servingPlusButton: {
+      borderColor:
+        colors.navy,
+
+      backgroundColor:
+        colors.navy,
+    },
+
+    servingMinus: {
+      color:
+        "#8F969E",
+
+      fontSize: 16,
+
+      fontWeight:
+        "700",
+    },
+
+    servingPlus: {
+      color:
+        "#FFFFFF",
+
+      fontSize: 16,
+
+      fontWeight:
+        "700",
+    },
+
+    servingCount: {
+      minWidth: 15,
+
+      color:
+        colors.navy,
+
+      fontSize: 9,
+
+      fontWeight:
+        "800",
+
+      textAlign:
+        "center",
+    },
+
+    /* MODAL */
+
+    pickerSafeArea: {
+      flex: 1,
+
+      backgroundColor:
+        "#FBFBF8",
+    },
+
+    menuPickerContainer: {
+      flex: 1,
+
+      paddingHorizontal:
+        16,
+
+      paddingBottom: 12,
+    },
+
+    modalHandle: {
+      width: 38,
+
+      height: 4,
+
+      alignSelf:
+        "center",
+
+      marginTop: 7,
+
+      marginBottom: 20,
+
+      borderRadius: 2,
+
+      backgroundColor:
+        "#C7CBD0",
+    },
+
+    pickerHeader: {
+      flexDirection:
+        "row",
+
+      justifyContent:
+        "space-between",
+
+      alignItems:
+        "center",
+
+      marginBottom: 17,
+    },
+
+    pickerEyebrow: {
+      color:
+        "#7C838C",
+
+      fontSize: 7,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        1.3,
+    },
+
+    pickerTitle: {
+      marginTop: 5,
+
+      color:
+        colors.navy,
+
+      fontSize: 23,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        -0.6,
+    },
+
+    pickerDescription: {
+      marginTop: 6,
+
+      color:
+        colors.muted,
+
+      fontSize: 10,
+
+      lineHeight: 15,
+    },
+
+    configureText: {
+      color:
+        colors.blue,
+
+      fontSize: 9,
+
+      fontWeight:
+        "700",
+    },
+
+    inputLabel: {
+      marginBottom: 6,
+
+      color:
+        "#646C75",
+
+      fontSize: 7,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        1,
+    },
+
+    hallSelector: {
+      height: 48,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      paddingHorizontal:
+        12,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#D7DCE1",
+
+      borderRadius: 10,
+
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    hallPin: {
+      marginRight: 9,
+
+      color:
+        colors.blue,
+
+      fontSize: 16,
+    },
+
+    hallName: {
+      flex: 1,
+
+      color:
+        colors.navy,
+
+      fontSize: 10,
+
+      fontWeight:
+        "700",
+    },
+
+    hallChevron: {
+      color:
+        "#8D949C",
+
+      fontSize: 13,
+    },
+
+    hallOptions: {
+      overflow:
+        "hidden",
+
+      marginTop: 5,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#DDE1E5",
+
+      borderRadius: 10,
+
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    hallOption: {
+      minHeight: 40,
+
+      justifyContent:
+        "center",
+
+      paddingHorizontal:
+        12,
+
+      borderBottomWidth:
+        1,
+
+      borderBottomColor:
+        "#ECEEF0",
+    },
+
+    hallOptionText: {
+      color:
+        "#6A727B",
+
+      fontSize: 9,
+    },
+
+    hallOptionTextSelected: {
+      color:
+        colors.navy,
+
+      fontWeight:
+        "800",
+    },
+
+    menuStatus: {
+      marginTop: 7,
+
+      marginBottom: 11,
+
+      color:
+        colors.green,
+
+      fontSize: 7,
+    },
+
+    availableHeader: {
+      flexDirection:
+        "row",
+
+      justifyContent:
+        "space-between",
+
+      paddingHorizontal:
+        12,
+
+      paddingVertical: 9,
+
+      borderWidth: 1,
+
+      borderBottomWidth:
+        0,
+
+      borderColor:
+        "#DEE2E5",
+
+      borderTopLeftRadius:
+        11,
+
+      borderTopRightRadius:
+        11,
+
+      backgroundColor:
+        "#F8F9F7",
+    },
+
+    availableHeaderText: {
+      color:
+        "#707983",
+
+      fontSize: 6,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        1.2,
+    },
+
+    menuListShell: {
+      flex: 1,
+
+      minHeight: 200,
+
+      overflow:
+        "hidden",
+
+      borderWidth: 1,
+
+      borderColor:
+        "#DEE2E5",
+
+      borderBottomLeftRadius:
+        11,
+
+      borderBottomRightRadius:
+        11,
+
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    loadingState: {
+      flex: 1,
+
+      minHeight: 200,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      padding: 20,
+    },
+
+    loadingText: {
+      marginTop: 8,
+
+      color:
+        colors.muted,
+
+      fontSize: 8,
+    },
+
+    errorText: {
+      color:
+        "#A35853",
+
+      fontSize: 9,
+
+      lineHeight: 14,
+
+      textAlign:
+        "center",
+    },
+
+    menuItemRow: {
+      minHeight: 79,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      paddingRight: 10,
+
+      borderBottomWidth: 1,
+
+      borderBottomColor:
+        "#ECEEF0",
+    },
+
+    menuItemStripe: {
+      width: 3,
+
+      alignSelf:
+        "stretch",
+
+      marginRight: 12,
+
+      backgroundColor:
+        colors.maize,
+    },
+
+    menuItemCopy: {
+      flex: 1,
+
+      paddingVertical: 10,
+
+      paddingRight: 8,
+    },
+
+    menuItemName: {
+      color:
+        colors.navy,
+
+      fontSize: 10,
+
+      fontWeight:
+        "800",
+    },
+
+    menuItemBadge: {
+      alignSelf:
+        "flex-start",
+
+      marginTop: 6,
+
+      paddingHorizontal:
+        7,
+
+      paddingVertical: 4,
+
+      borderRadius: 7,
+
+      backgroundColor:
+        "#F4F5F0",
+    },
+
+    menuItemBadgeText: {
+      color:
+        "#59636D",
+
+      fontSize: 6,
+    },
+
+    mealTimeText: {
+      marginTop: 4,
+
+      color:
+        "#8D949B",
+
+      fontSize: 6,
+    },
+
+    /* ESTIMATED NUTRITION */
+
+    estimatedCard: {
+      marginTop: 10,
+
+      padding: 12,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#E4C850",
+
+      borderRadius: 12,
+
+      backgroundColor:
+        "#FFF9E9",
+    },
+
+    estimatedHeader: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "space-between",
+    },
+
+    estimatedLabel: {
+      color:
+        "#836A00",
+
+      fontSize: 6,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        1,
+    },
+
+    estimatedCalories: {
+      color:
+        colors.navy,
+
+      fontSize: 12,
+
+      fontWeight:
+        "800",
+    },
+
+    estimatedNutrients: {
+      flexDirection:
+        "row",
+
+      justifyContent:
+        "space-between",
+
+      marginTop: 13,
+    },
+
+    estimatedNutrient: {
+      alignItems:
+        "center",
+
+      flex: 1,
+    },
+
+    estimatedNutrientLabel: {
+      color:
+        "#83775A",
+
+      fontSize: 5,
+    },
+
+    estimatedNutrientValue: {
+      marginTop: 3,
+
+      color:
+        colors.navy,
+
+      fontSize: 6,
+
+      fontWeight:
+        "800",
+    },
+
+    estimatedHelp: {
+      marginTop: 10,
+
+      color:
+        "#8F866C",
+
+      fontSize: 5,
+
+      lineHeight: 9,
+    },
+
+    addSelectedButton: {
+      height: 47,
+
+      marginTop: 10,
+
+      borderRadius: 11,
+
+      backgroundColor:
+        colors.navy,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+    },
+
+    addSelectedButtonDisabled: {
+      opacity: 0.45,
+    },
+
+    addSelectedButtonText: {
+      color:
+        "#FFFFFF",
+
+      fontSize: 9,
+
+      fontWeight:
+        "800",
+    },
+
+    closePickerButton: {
+      height: 33,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+    },
+
+    closePickerText: {
+      color:
+        "#818890",
+
+      fontSize: 8,
+
+      fontWeight:
+        "600",
+    },
+
+    /* NUTRIENT CUSTOMIZATION */
+
+    nutrientPickerContent: {
+      paddingHorizontal:
+        17,
+
+      paddingBottom: 30,
+    },
+
+    nutrientChoiceGrid: {
+      flexDirection:
+        "row",
+
+      flexWrap:
+        "wrap",
+
+      justifyContent:
+        "space-between",
+
+      marginTop: 18,
+    },
+
+    nutrientChoice: {
+      width: "48%",
+
+      minHeight: 51,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 8,
+
+      marginBottom: 8,
+
+      paddingHorizontal:
+        10,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#DDE1E4",
+
+      borderRadius: 11,
+
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    nutrientChoiceSelected: {
+      borderColor:
+        "#E1B900",
+
+      backgroundColor:
+        "#FFFAE8",
+    },
+
+    checkBox: {
+      width: 19,
+
+      height: 19,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#CFD5DA",
+
+      borderRadius: 5,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+    },
+
+    checkBoxSelected: {
+      borderColor:
+        colors.navy,
+
+      backgroundColor:
+        colors.navy,
+    },
+
+    checkText: {
+      color:
+        "#FFFFFF",
+
+      fontSize: 10,
+
+      fontWeight:
+        "800",
+    },
+
+    nutrientChoiceCopy: {
+      flex: 1,
+    },
+
+    nutrientChoiceTitle: {
+      color:
+        colors.navy,
+
+      fontSize: 8,
+
+      fontWeight:
+        "800",
+    },
+
+    nutrientChoiceValue: {
+      marginTop: 3,
+
+      color:
+        "#8C939B",
+
+      fontSize: 5,
+    },
+
+    doneButton: {
+      height: 48,
+
+      marginTop: 12,
+
+      borderRadius: 11,
+
+      backgroundColor:
+        colors.navy,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+    },
+
+    doneButtonText: {
+      color:
+        "#FFFFFF",
+
+      fontSize: 9,
+
+      fontWeight:
+        "800",
+    },
+  });
