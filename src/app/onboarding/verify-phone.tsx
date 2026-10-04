@@ -1,5 +1,5 @@
 import { useState } from "react";
-// import { useOnboarding } from "../../context/OnboardingContext";
+
 import {
   ActivityIndicator,
   Alert,
@@ -23,10 +23,7 @@ import { useOnboarding } from "../../context/OnboardingContext";
 import { API_URL } from "../../services/api";
 
 export default function VerifyPhoneScreen() {
-  const { profile, setPhone, } = useOnboarding();
-
   const params = useLocalSearchParams<{ phone: string }>();
-  
 
   const phone = params.phone;
 
@@ -34,7 +31,7 @@ export default function VerifyPhoneScreen() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
 
-  // const { setPhone } = useOnboarding();
+  const { setPhone } = useOnboarding();
 
   // --------------------------------------------------
   // Verify code
@@ -123,40 +120,31 @@ export default function VerifyPhoneScreen() {
     try {
       setResending(true);
 
-      const response =
-  await fetch(
-    `${API_URL}/auth/phone/verify-code`,
-    {
-      method: "POST",
+      const response = await fetch(
+        `${API_URL}/auth/phone/send-code`,
+        {
+          method: "POST",
 
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-      body: JSON.stringify({
-        phone: profile.phone,
-        code,
-      }),
-    }
-  );
+          body: JSON.stringify({
+            phone,
+          }),
+        }
+      );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         Alert.alert(
-          "Verification failed",
-          data.error ??
-            "The code is incorrect."
+          "Couldn't resend code",
+          data.error ?? "Please try again."
         );
 
         return;
       }
-
-      router.replace(
-        "/onboarding/about"
-      );
 
       setCode("");
 
