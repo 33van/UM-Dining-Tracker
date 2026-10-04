@@ -3,7 +3,6 @@ import { useState } from "react";
 import {
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,10 +10,11 @@ import {
   View,
 } from "react-native";
 
-import { colors } from "../constants/theme";
-import { useOnboarding } from "../context/OnboardingContext";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import  MainBottomNav  from "../components/MainBottomNav";
+import { colors } from "../../constants/theme";
+import { useOnboarding } from "../../context/OnboardingContext";
+
 
 
 type Meal = {
@@ -665,8 +665,6 @@ export default function DashboardScreen() {
 
 
         {/* Your existing navigation component */}
-
-        <MainBottomNav />
 
       </View>
 
@@ -1883,8 +1881,12 @@ const styles = StyleSheet.create({
   },
 
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  left: 0,
+  right: 0,
+},
 
   modalSheet: {
     paddingHorizontal: 22,
