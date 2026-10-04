@@ -1,9 +1,8 @@
 {
   "phone": "+17633133957",
   "healthConsiderations": [
-    "High cholesterol",
-    "Lactose intolerance",
-    "Iron deficiency"
+    "Vitamin A deficiency",
+    "Vitamin C deficiency"
   ],
   "allergies": [],
   "foodPreferences": [],
@@ -25,9 +24,9 @@
   "allowLocationRecommendations": true,
   "heightFeet": 5,
   "heightInches": 7,
-  "weightLbs": 145,
-  "age": 20,
-  "gender": "Woman",
+  "weightLbs": 123,
+  "age": 23,
+  "gender": "Man",
   "calorieGoal": 2150,
   "calorieGoalIsCustom": false
 }

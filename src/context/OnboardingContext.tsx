@@ -7,13 +7,7 @@ import {
   useState,
 } from "react";
 
-<<<<<<< HEAD
-import {
-  loadProfile,
-} from "../services/session";
-=======
 import AsyncStorage from "@react-native-async-storage/async-storage";
->>>>>>> origin/main
 
 import { FoodPreference } from "../constants/foodPreferences";
 
@@ -80,15 +74,8 @@ type GoalsInfo = {
 };
 
 type OnboardingContextType = {
-<<<<<<< HEAD
-  profile: UserProfile;
-  calendarSession: CalendarSession | null;
-  lastCalendarPullAt: number | null;
-  sessionLoading: boolean;
-=======
   profile:
     UserProfile;
->>>>>>> origin/main
 
   /*
    * False while AsyncStorage is restoring
@@ -336,114 +323,12 @@ export function OnboardingProvider({
   children:
     ReactNode;
 }) {
-<<<<<<< HEAD
-  const [profile, setProfile] = useState<UserProfile>({
-  phone: "",
-  healthConsiderations: [],
-  allergies: [],
-  foodPreferences: [],
-  freeTimeBlocks: [],
-
-  recommendationWindows: [],
-  allowLocationRecommendations: true,
-  
-});
-  const [sessionLoading, setSessionLoading] =
-  useState(true);
-  const setPlanInfo = useCallback((info: PlanInfo) => {
-  setProfile((current) => ({
-    ...current,
-    ...info,
-  }));
-}, []);
-
-  const [calendarSession, setCalendarSession] =
-    useState<CalendarSession | null>(null);
-
-  const [lastCalendarPullAt, setLastCalendarPullAt] =
-    useState<number | null>(null);
-
-  const setPhone = useCallback((phone: string) => {
-    setProfile((current) => ({
-      ...current,
-      phone,
-    }));
-  }, []);
-
-  const setBodyInfo = useCallback((info: BodyInfo) => {
-    setProfile((current) => ({
-      ...current,
-      ...info,
-    }));
-  }, []);
-
-  const setGoalsInfo = useCallback((info: GoalsInfo) => {
-    setProfile((current) => ({
-      ...current,
-      ...info,
-    }));
-  }, []);
-
-  useEffect(() => {
-  async function restoreProfile() {
-    try {
-      const savedProfile =
-        await loadProfile();
-
-      if (savedProfile) {
-        console.log(
-          "RESTORED USER PROFILE:"
-        );
-
-        console.log(
-          JSON.stringify(
-            savedProfile,
-            null,
-            2
-          )
-        );
-
-        setProfile(savedProfile);
-      }
-    } catch (error) {
-      console.error(
-        "FAILED TO RESTORE PROFILE:",
-        error
-      );
-    } finally {
-      setSessionLoading(false);
-    }
-  }
-
-  void restoreProfile();
-}, []);
-
-  // const setMealWindows = useCallback(
-  // (mealWindows: MealWindows) => {
-  //   setProfile((current) => ({
-  //     ...current,
-  //     mealWindows,
-  //   }));
-  // },
-  // []
-// );
-
-  const saveCalendarAvailability = useCallback(
-  (
-    session: CalendarSession,
-    freeTimeBlocks: FreeTimeBlock[]
-  ) => {
-    debugFreeTimeBlocks(
-      "FREE TIME FROM GOOGLE CALENDAR",
-      freeTimeBlocks
-=======
   const [
     profile,
     setProfile,
   ] =
     useState<UserProfile>(
       DEFAULT_PROFILE
->>>>>>> origin/main
     );
 
   /*
@@ -1002,22 +887,8 @@ export function OnboardingProvider({
 
   return (
     <OnboardingContext.Provider
-<<<<<<< HEAD
-  value={{
-    profile,
-    sessionLoading,
-
-    calendarSession,
-    lastCalendarPullAt,
-
-    setPhone,
-    setBodyInfo,
-    setGoalsInfo,
-    setPlanInfo,
-=======
       value={{
         profile,
->>>>>>> origin/main
 
         hydrated,
 

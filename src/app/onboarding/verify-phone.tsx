@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+// import { useOnboarding } from "../../context/OnboardingContext";
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,10 @@ import { useOnboarding } from "../../context/OnboardingContext";
 import { API_URL } from "../../services/api";
 
 export default function VerifyPhoneScreen() {
+  const { profile, setPhone, } = useOnboarding();
+
   const params = useLocalSearchParams<{ phone: string }>();
+  
 
   const phone = params.phone;
 
@@ -31,7 +34,7 @@ export default function VerifyPhoneScreen() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
 
-  const { setPhone } = useOnboarding();
+  // const { setPhone } = useOnboarding();
 
   // --------------------------------------------------
   // Verify code
