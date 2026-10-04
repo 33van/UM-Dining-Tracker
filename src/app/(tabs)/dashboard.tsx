@@ -50,8 +50,15 @@ type DiningHallOption = {
   name: string;
 };
 
+type CarbonLevel =
+  | "low"
+  | "medium"
+  | "high"
+  | "unknown";
+
 type DiningMenuItem = {
   meal: string;
+
   mealTime: string;
 
   name: string;
@@ -74,13 +81,6 @@ type DiningMenuItem = {
 
   carbsG?: number | undefined;
 
-  /*
-   * Your current scraper may not
-   * have this yet.
-   *
-   * If fiberG is missing from the
-   * backend, the app will show "—".
-   */
   fiberG?: number | undefined;
 
   calciumPercent?: number | undefined;
@@ -106,8 +106,7 @@ type LoggedDiningItem = {
 
   menuItem: DiningMenuItem;
 
-  hall:
-    DiningHallSlug;
+  hall: DiningHallSlug;
 
   hallName: string;
 
@@ -140,6 +139,22 @@ type NutrientConfig = {
 type PickerScreen =
   | "menu"
   | "nutrients";
+
+type CarbonSummary = {
+  level: CarbonLevel;
+
+  low: number;
+
+  medium: number;
+
+  high: number;
+
+  unknown: number;
+
+  knownServings: number;
+
+  totalServings: number;
+};
 
 /* ============================================ */
 /* DINING HALLS                                 */
@@ -194,13 +209,6 @@ const DINING_HALLS: DiningHallOption[] = [
 /* NUTRIENT OPTIONS                             */
 /* ============================================ */
 
-/*
- * These targets are currently UI defaults.
- *
- * Later you can move these into UserProfile
- * if Gemini/backend calculates personalized
- * nutrient targets.
- */
 const NUTRIENT_OPTIONS: NutrientConfig[] = [
   {
     key: "proteinG",
@@ -396,13 +404,183 @@ function formatNutrientValue(
 }
 
 /* ============================================ */
+/* CARBON                                       */
+/* ============================================ */
+
+function getCarbonLevel(
+  item: DiningMenuItem
+): CarbonLevel {
+  const traits =
+    item.traits.map(
+      (trait) =>
+        trait
+          .trim()
+          .toLowerCase()
+    );
+
+  if (
+    traits.some(
+      (trait) =>
+        trait.includes(
+          "carbon footprint low"
+        )
+    )
+  ) {
+    return "low";
+  }
+
+  if (
+    traits.some(
+      (trait) =>
+        trait.includes(
+          "carbon footprint medium"
+        )
+    )
+  ) {
+    return "medium";
+  }
+
+  if (
+    traits.some(
+      (trait) =>
+        trait.includes(
+          "carbon footprint high"
+        )
+    )
+  ) {
+    return "high";
+  }
+
+  return "unknown";
+}
+
+function getDailyCarbonSummary(
+  loggedItems: LoggedDiningItem[]
+): CarbonSummary {
+  let low = 0;
+  let medium = 0;
+  let high = 0;
+  let unknown = 0;
+
+  for (
+    const logged
+    of loggedItems
+  ) {
+    const carbon =
+      getCarbonLevel(
+        logged.menuItem
+      );
+
+    if (
+      carbon === "low"
+    ) {
+      low +=
+        logged.servings;
+    } else if (
+      carbon === "medium"
+    ) {
+      medium +=
+        logged.servings;
+    } else if (
+      carbon === "high"
+    ) {
+      high +=
+        logged.servings;
+    } else {
+      unknown +=
+        logged.servings;
+    }
+  }
+
+  const knownServings =
+    low +
+    medium +
+    high;
+
+  const totalServings =
+    knownServings +
+    unknown;
+
+  let level:
+    CarbonLevel =
+    "unknown";
+
+  /*
+   * This is a categorical daily mix,
+   * NOT an estimate of kg CO2.
+   *
+   * Low = 1
+   * Medium = 2
+   * High = 3
+   *
+   * We average Michigan Dining's
+   * categorical labels based on servings.
+   */
+  if (
+    knownServings > 0
+  ) {
+    const score =
+      (
+        low * 1 +
+        medium * 2 +
+        high * 3
+      ) /
+      knownServings;
+
+    if (
+      score < 1.5
+    ) {
+      level =
+        "low";
+    } else if (
+      score < 2.5
+    ) {
+      level =
+        "medium";
+    } else {
+      level =
+        "high";
+    }
+  }
+
+  return {
+    level,
+
+    low,
+
+    medium,
+
+    high,
+
+    unknown,
+
+    knownServings,
+
+    totalServings,
+  };
+}
+
+function carbonLabel(
+  level: CarbonLevel
+) {
+  if (
+    level === "unknown"
+  ) {
+    return "—";
+  }
+
+  return level.toUpperCase();
+}
+
+/* ============================================ */
 /* DASHBOARD                                    */
 /* ============================================ */
 
 export default function DashboardScreen() {
   const {
     profile,
-  } = useOnboarding();
+  } =
+    useOnboarding();
 
   const calorieGoal =
     profile.calorieGoal ??
@@ -459,10 +637,12 @@ export default function DashboardScreen() {
             logged
           ) =>
             total +
-            (logged
-              .menuItem
-              .calories ??
-              0) *
+            (
+              logged
+                .menuItem
+                .calories ??
+              0
+            ) *
               logged.servings,
 
           0
@@ -495,35 +675,56 @@ export default function DashboardScreen() {
     );
 
   /* ========================================== */
-  /* NUTRIENT TOTALS                            */
+  /* CARBON                                     */
+  /* ========================================== */
+
+  const carbonSummary =
+    useMemo(
+      () =>
+        getDailyCarbonSummary(
+          loggedItems
+        ),
+
+      [
+        loggedItems,
+      ]
+    );
+
+  /* ========================================== */
+  /* NUTRIENTS                                  */
   /* ========================================== */
 
   const nutrientTotals =
-    useMemo(() => {
-      const totals: Partial<
-        Record<
-          NutrientKey,
-          number | null
-        >
-      > = {};
+    useMemo(
+      () => {
+        const totals:
+          Partial<
+            Record<
+              NutrientKey,
+              number | null
+            >
+          > = {};
 
-      for (
-        const option
-        of NUTRIENT_OPTIONS
-      ) {
-        totals[
-          option.key
-        ] =
-          totalNutrient(
-            loggedItems,
+        for (
+          const option
+          of NUTRIENT_OPTIONS
+        ) {
+          totals[
             option.key
-          );
-      }
+          ] =
+            totalNutrient(
+              loggedItems,
+              option.key
+            );
+        }
 
-      return totals;
-    }, [
-      loggedItems,
-    ]);
+        return totals;
+      },
+
+      [
+        loggedItems,
+      ]
+    );
 
   const displayedNutrients =
     NUTRIENT_OPTIONS.filter(
@@ -534,7 +735,7 @@ export default function DashboardScreen() {
     );
 
   /* ========================================== */
-  /* OPEN MODALS                                */
+  /* MODALS                                     */
   /* ========================================== */
 
   function openMealPicker() {
@@ -558,7 +759,7 @@ export default function DashboardScreen() {
   }
 
   /* ========================================== */
-  /* ADD DINING ITEMS                           */
+  /* ADD ITEMS                                  */
   /* ========================================== */
 
   function addDiningItems(
@@ -568,17 +769,14 @@ export default function DashboardScreen() {
     setLoggedItems(
       (current) => {
         const next =
-          [...current];
+          [
+            ...current,
+          ];
 
         for (
           const newItem
           of incoming
         ) {
-          /*
-           * If the same dining item
-           * is already logged,
-           * increase its servings.
-           */
           const existingIndex =
             next.findIndex(
               (existing) =>
@@ -655,7 +853,7 @@ export default function DashboardScreen() {
   }
 
   /* ========================================== */
-  /* UI                                         */
+  /* SCREEN                                     */
   /* ========================================== */
 
   return (
@@ -770,7 +968,9 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* ENERGY */}
+          {/* ================================= */}
+          {/* ENERGY + CARBON                   */}
+          {/* ================================= */}
 
           <View
             style={
@@ -854,7 +1054,7 @@ export default function DashboardScreen() {
               </Pressable>
             </View>
 
-            <CalorieRing
+            <EnergySummary
               percent={
                 caloriePercent
               }
@@ -864,10 +1064,25 @@ export default function DashboardScreen() {
               goal={
                 calorieGoal
               }
+              carbonSummary={
+                carbonSummary
+              }
             />
           </View>
 
-          {/* NUTRIENTS */}
+          {/* ================================= */}
+          {/* CARBON BREAKDOWN                  */}
+          {/* ================================= */}
+
+          <CarbonBreakdown
+            summary={
+              carbonSummary
+            }
+          />
+
+          {/* ================================= */}
+          {/* NUTRIENTS                         */}
+          {/* ================================= */}
 
           <View
             style={
@@ -1015,7 +1230,9 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* SMART RECOMMENDATION */}
+          {/* ================================= */}
+          {/* RECOMMENDATION                    */}
+          {/* ================================= */}
 
           <View
             style={
@@ -1054,7 +1271,7 @@ export default function DashboardScreen() {
                   styles.recommendationTitle
                 }
               >
-                Lunch at South Quad?
+                Find your next meal
               </Text>
 
               <Text
@@ -1062,9 +1279,11 @@ export default function DashboardScreen() {
                   styles.recommendationDescription
                 }
               >
-                We'll use your schedule, location,
-                preferences and today's dining menu
-                to suggest a meal.
+                Maize can use today's menu, your
+                nutrition goals and Michigan
+                Dining's carbon labels to favor
+                foods that fit both your health
+                and sustainability goals.
               </Text>
             </View>
 
@@ -1077,7 +1296,7 @@ export default function DashboardScreen() {
               ]}
               onPress={() =>
                 setPlanned(
-                  true
+                  !planned
                 )
               }
             >
@@ -1093,7 +1312,9 @@ export default function DashboardScreen() {
             </Pressable>
           </View>
 
-          {/* TODAY'S LOG */}
+          {/* ================================= */}
+          {/* TODAY'S LOG                       */}
+          {/* ================================= */}
 
           <View
             style={
@@ -1162,8 +1383,9 @@ export default function DashboardScreen() {
                   }
                 >
                   Add foods from a Michigan Dining
-                  menu to start tracking today's
-                  calories and nutrients.
+                  menu to begin calculating your
+                  calories, nutrients and carbon
+                  footprint for today.
                 </Text>
               </View>
             ) : (
@@ -1209,7 +1431,9 @@ export default function DashboardScreen() {
           />
         </ScrollView>
 
-        {/* DINING / NUTRIENT PICKER */}
+        {/* ================================= */}
+        {/* PICKER MODAL                      */}
+        {/* ================================= */}
 
         <DiningPickerModal
           visible={
@@ -1286,62 +1510,292 @@ function Brand() {
 }
 
 /* ============================================ */
-/* CALORIE RING                                 */
+/* ENERGY SUMMARY                               */
 /* ============================================ */
 
-function CalorieRing({
+function EnergySummary({
   percent,
   consumed,
   goal,
+  carbonSummary,
 }: {
   percent: number;
 
   consumed: number;
 
   goal: number;
+
+  carbonSummary:
+    CarbonSummary;
 }) {
   return (
     <View
       style={
-        styles.ringOuter
+        styles.energySummary
       }
     >
       <View
         style={
-          styles.ringInner
+          styles.ringOuter
+        }
+      >
+        <View
+          style={
+            styles.ringInner
+          }
+        >
+          <Text
+            style={
+              styles.ringNumber
+            }
+          >
+            {consumed.toLocaleString()}
+          </Text>
+
+          <Text
+            style={
+              styles.ringLabel
+            }
+          >
+            of{" "}
+            {goal.toLocaleString()} kcal
+          </Text>
+
+          <Text
+            style={
+              styles.ringPercent
+            }
+          >
+            {percent}% today
+          </Text>
+        </View>
+      </View>
+
+      <View
+        style={
+          styles.carbonBadge
         }
       >
         <Text
           style={
-            styles.ringNumber
+            styles.carbonBadgeIcon
           }
         >
-          {consumed.toLocaleString()}
+          ♻
         </Text>
 
-        <Text
-          style={
-            styles.ringLabel
-          }
-        >
-          of{" "}
-          {goal.toLocaleString()} kcal
-        </Text>
+        <View>
+          <Text
+            style={
+              styles.carbonBadgeEyebrow
+            }
+          >
+            CARBON
+          </Text>
 
-        <Text
-          style={
-            styles.ringPercent
-          }
-        >
-          {percent}% today
-        </Text>
+          <Text
+            style={[
+              styles.carbonBadgeLevel,
+
+              carbonSummary.level ===
+                "low" &&
+                styles.carbonLow,
+
+              carbonSummary.level ===
+                "medium" &&
+                styles.carbonMedium,
+
+              carbonSummary.level ===
+                "high" &&
+                styles.carbonHigh,
+            ]}
+          >
+            {carbonLabel(
+              carbonSummary.level
+            )}
+          </Text>
+        </View>
       </View>
     </View>
   );
 }
 
 /* ============================================ */
-/* LOGGED FOOD ROW                              */
+/* CARBON BREAKDOWN                             */
+/* ============================================ */
+
+function CarbonBreakdown({
+  summary,
+}: {
+  summary:
+    CarbonSummary;
+}) {
+  return (
+    <View
+      style={
+        styles.carbonCard
+      }
+    >
+      <View
+        style={
+          styles.carbonCardTop
+        }
+      >
+        <View>
+          <Text
+            style={
+              styles.eyebrow
+            }
+          >
+            TODAY'S CARBON FOOTPRINT
+          </Text>
+
+          <Text
+            style={
+              styles.carbonCardTitle
+            }
+          >
+            {summary.level ===
+            "unknown"
+              ? "No carbon data yet"
+              : `${summary.level
+                  .charAt(0)
+                  .toUpperCase()}${summary.level.slice(
+                  1
+                )} impact`}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.carbonStatusPill
+          }
+        >
+          <Text
+            style={[
+              styles.carbonStatusText,
+
+              summary.level ===
+                "low" &&
+                styles.carbonLow,
+
+              summary.level ===
+                "medium" &&
+                styles.carbonMedium,
+
+              summary.level ===
+                "high" &&
+                styles.carbonHigh,
+            ]}
+          >
+            {carbonLabel(
+              summary.level
+            )}
+          </Text>
+        </View>
+      </View>
+
+      <View
+        style={
+          styles.carbonCounts
+        }
+      >
+        <CarbonCount
+          value={
+            summary.low
+          }
+          label="LOW"
+          level="low"
+        />
+
+        <CarbonCount
+          value={
+            summary.medium
+          }
+          label="MEDIUM"
+          level="medium"
+        />
+
+        <CarbonCount
+          value={
+            summary.high
+          }
+          label="HIGH"
+          level="high"
+        />
+
+        <CarbonCount
+          value={
+            summary.unknown
+          }
+          label="UNLABELED"
+          level="unknown"
+        />
+      </View>
+
+      <Text
+        style={
+          styles.carbonExplanation
+        }
+      >
+        Based on Michigan Dining's Low,
+        Medium and High carbon footprint
+        labels for foods you logged today.
+        This is a categorical impact level,
+        not an estimated CO₂ mass.
+      </Text>
+    </View>
+  );
+}
+
+function CarbonCount({
+  value,
+  label,
+  level,
+}: {
+  value: number;
+
+  label: string;
+
+  level:
+    CarbonLevel;
+}) {
+  return (
+    <View
+      style={
+        styles.carbonCount
+      }
+    >
+      <Text
+        style={[
+          styles.carbonCountNumber,
+
+          level === "low" &&
+            styles.carbonLow,
+
+          level === "medium" &&
+            styles.carbonMedium,
+
+          level === "high" &&
+            styles.carbonHigh,
+        ]}
+      >
+        {value}
+      </Text>
+
+      <Text
+        style={
+          styles.carbonCountLabel
+        }
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/* ============================================ */
+/* LOGGED FOOD                                  */
 /* ============================================ */
 
 function LoggedFoodRow({
@@ -1365,6 +1819,11 @@ function LoggedFoodRow({
       0
     ) *
     logged.servings;
+
+  const carbon =
+    getCarbonLevel(
+      logged.menuItem
+    );
 
   return (
     <View
@@ -1415,6 +1874,40 @@ function LoggedFoodRow({
           {calories.toLocaleString()} kcal
         </Text>
 
+        <View
+          style={
+            styles.loggedCarbonRow
+          }
+        >
+          <Text
+            style={
+              styles.loggedCarbonLabel
+            }
+          >
+            Carbon:
+          </Text>
+
+          <Text
+            style={[
+              styles.loggedCarbonValue,
+
+              carbon === "low" &&
+                styles.carbonLow,
+
+              carbon ===
+                "medium" &&
+                styles.carbonMedium,
+
+              carbon === "high" &&
+                styles.carbonHigh,
+            ]}
+          >
+            {carbonLabel(
+              carbon
+            )}
+          </Text>
+        </View>
+
         {logged
           .menuItem
           .allergens
@@ -1452,7 +1945,7 @@ function LoggedFoodRow({
 }
 
 /* ============================================ */
-/* SERVING CONTROL                              */
+/* SERVINGS                                     */
 /* ============================================ */
 
 function ServingControl({
@@ -1508,6 +2001,7 @@ function ServingControl({
       <Pressable
         style={[
           styles.servingButton,
+
           styles.servingPlusButton,
         ]}
         onPress={
@@ -1625,13 +2119,6 @@ function DiningPickerModal({
       string | null
     >(null);
 
-  /*
-   * When the parent opens this modal
-   * from Customize, show nutrient
-   * settings first.
-   *
-   * When opened from + Add, show menu.
-   */
   useEffect(
     () => {
       if (
@@ -1649,10 +2136,10 @@ function DiningPickerModal({
     ]
   );
 
-  /*
-   * Fetch dining menu directly from
-   * your Express + Cheerio route.
-   */
+  /* ========================================== */
+  /* LOAD REAL CHEERIO MENU                     */
+  /* ========================================== */
+
   useEffect(
     () => {
       if (
@@ -1715,37 +2202,38 @@ function DiningPickerModal({
           if (
             !response.ok
           ) {
-            const message =
+            let message =
+              "Could not load dining menu.";
+
+            if (
               typeof data ===
                 "object" &&
               data !==
                 null &&
               "error" in
                 data
-                ? String(
-                    (
-                      data as {
-                        error?: unknown;
-                      }
-                    )
-                      .error
-                  )
-                : "Could not load dining menu.";
+            ) {
+              const maybeError =
+                (
+                  data as {
+                    error?: unknown;
+                  }
+                ).error;
+
+              if (
+                typeof maybeError ===
+                "string"
+              ) {
+                message =
+                  maybeError;
+              }
+            }
 
             throw new Error(
               message
             );
           }
 
-          /*
-           * This supports either:
-           *
-           * res.json(items)
-           *
-           * or:
-           *
-           * res.json({ items })
-           */
           let rawItems:
             DiningMenuItem[] =
             [];
@@ -1763,22 +2251,23 @@ function DiningPickerModal({
             data !==
               null &&
             "items" in
-              data &&
-            Array.isArray(
+              data
+          ) {
+            const maybeItems =
               (
                 data as {
                   items?: unknown;
                 }
-              ).items
-            )
-          ) {
-            rawItems =
-              (
-                data as {
-                  items:
-                    DiningMenuItem[];
-                }
               ).items;
+
+            if (
+              Array.isArray(
+                maybeItems
+              )
+            ) {
+              rawItems =
+                maybeItems as DiningMenuItem[];
+            }
           }
 
           const items =
@@ -1788,6 +2277,14 @@ function DiningPickerModal({
                 index
               ) => ({
                 ...item,
+
+                allergens:
+                  item.allergens ??
+                  [],
+
+                traits:
+                  item.traits ??
+                  [],
 
                 id:
                   `${selectedHall}-${item.meal}-${item.name}-${index}`,
@@ -1907,8 +2404,10 @@ function DiningPickerModal({
         item
       ) =>
         total +
-        (item.calories ??
-          0) *
+        (
+          item.calories ??
+          0
+        ) *
           (
             servings[
               item.id
@@ -1996,66 +2495,8 @@ function DiningPickerModal({
             ] ??
             1,
 
-          menuItem: {
-            meal:
-              item.meal,
-
-            mealTime:
-              item.mealTime,
-
-            name:
-              item.name,
-
-            calories:
-              item.calories,
-
-            totalFatG:
-              item.totalFatG,
-
-            saturatedFatG:
-              item.saturatedFatG,
-
-            transFatG:
-              item.transFatG,
-
-            proteinG:
-              item.proteinG,
-
-            sugarG:
-              item.sugarG,
-
-            cholesterolMg:
-              item.cholesterolMg,
-
-            sodiumMg:
-              item.sodiumMg,
-
-            carbsG:
-              item.carbsG,
-
-            fiberG:
-              item.fiberG,
-
-            calciumPercent:
-              item.calciumPercent,
-
-            ironPercent:
-              item.ironPercent,
-
-            vitaminAPercent:
-              item.vitaminAPercent,
-
-            vitaminCPercent:
-              item.vitaminCPercent,
-
-            allergens:
-              item.allergens ??
-              [],
-
-            traits:
-              item.traits ??
-              [],
-          },
+          menuItem:
+            item,
         })
       );
 
@@ -2098,12 +2539,15 @@ function DiningPickerModal({
             item !== key
         )
       );
-    } else {
-      onChangeVisibleNutrients([
-        ...visibleNutrients,
-        key,
-      ]);
+
+      return;
     }
+
+    onChangeVisibleNutrients([
+      ...visibleNutrients,
+
+      key,
+    ]);
   }
 
   function close() {
@@ -2171,8 +2615,9 @@ function DiningPickerModal({
                 styles.pickerDescription
               }
             >
-              Select the nutrients you want visible
-              in your Daily Balance card.
+              Select which nutrition labels you
+              want displayed in your Daily
+              Balance card.
             </Text>
 
             <View
@@ -2277,15 +2722,6 @@ function DiningPickerModal({
                 styles.doneButton
               }
               onPress={() => {
-                /*
-                 * If Customize was opened
-                 * directly from the dashboard,
-                 * Done closes the sheet.
-                 *
-                 * If the user opened settings
-                 * while adding food, return
-                 * to the food picker.
-                 */
                 if (
                   startScreen ===
                   "nutrients"
@@ -2322,8 +2758,6 @@ function DiningPickerModal({
                 styles.modalHandle
               }
             />
-
-            {/* PICKER HEADER */}
 
             <View
               style={
@@ -2364,8 +2798,6 @@ function DiningPickerModal({
                 </Text>
               </Pressable>
             </View>
-
-            {/* DINING HALL */}
 
             <Text
               style={
@@ -2471,8 +2903,6 @@ function DiningPickerModal({
               ● Today's menu from Michigan Dining
             </Text>
 
-            {/* MENU */}
-
             <View
               style={
                 styles.availableHeader
@@ -2532,6 +2962,22 @@ function DiningPickerModal({
                     }
                   </Text>
                 </View>
+              ) : menuItems.length ===
+                0 ? (
+                <View
+                  style={
+                    styles.loadingState
+                  }
+                >
+                  <Text
+                    style={
+                      styles.loadingText
+                    }
+                  >
+                    No menu items were returned for
+                    this dining hall today.
+                  </Text>
+                </View>
               ) : (
                 <ScrollView
                   showsVerticalScrollIndicator={
@@ -2547,6 +2993,11 @@ function DiningPickerModal({
                           item.id
                         ] ??
                         0;
+
+                      const carbon =
+                        getCarbonLevel(
+                          item
+                        );
 
                       return (
                         <View
@@ -2580,23 +3031,52 @@ function DiningPickerModal({
 
                             <View
                               style={
-                                styles.menuItemBadge
+                                styles.menuMetaRow
                               }
                             >
-                              <Text
+                              <View
                                 style={
-                                  styles.menuItemBadgeText
+                                  styles.menuItemBadge
                                 }
                               >
-                                {
-                                  item.meal
-                                }
+                                <Text
+                                  style={
+                                    styles.menuItemBadgeText
+                                  }
+                                >
+                                  {
+                                    item.meal
+                                  }
 
-                                {" · "}
+                                  {" · "}
 
-                                {item.calories ??
-                                  "—"}{" "}
-                                kcal
+                                  {item.calories ??
+                                    "—"}{" "}
+                                  kcal
+                                </Text>
+                              </View>
+
+                              <Text
+                                style={[
+                                  styles.menuCarbonText,
+
+                                  carbon ===
+                                    "low" &&
+                                    styles.carbonLow,
+
+                                  carbon ===
+                                    "medium" &&
+                                    styles.carbonMedium,
+
+                                  carbon ===
+                                    "high" &&
+                                    styles.carbonHigh,
+                                ]}
+                              >
+                                ♻{" "}
+                                {carbonLabel(
+                                  carbon
+                                )}
                               </Text>
                             </View>
 
@@ -2742,12 +3222,11 @@ function DiningPickerModal({
                   styles.estimatedHelp
                 }
               >
-                Totals update automatically from serving
-                amounts and Michigan Dining nutrition data.
+                Totals are calculated from Michigan
+                Dining's parsed nutrition data and
+                your selected serving amounts.
               </Text>
             </View>
-
-            {/* ADD BUTTON */}
 
             <Pressable
               style={[
@@ -2830,6 +3309,9 @@ const styles =
     scrollContent: {
       paddingHorizontal:
         22,
+
+      paddingBottom:
+        110,
     },
 
     /* HEADER */
@@ -3050,10 +3532,10 @@ const styles =
       fontSize: 7,
     },
 
-    /* CALORIES */
+    /* ENERGY */
 
     calorieCard: {
-      minHeight: 180,
+      minHeight: 198,
 
       flexDirection:
         "row",
@@ -3072,7 +3554,7 @@ const styles =
     calorieCopy: {
       flex: 1,
 
-      paddingRight: 12,
+      paddingRight: 10,
     },
 
     statusPill: {
@@ -3134,7 +3616,7 @@ const styles =
     calorieDescription: {
       marginTop: 6,
 
-      maxWidth: 190,
+      maxWidth: 185,
 
       color:
         "#C7CFDA",
@@ -3197,19 +3679,28 @@ const styles =
         "800",
     },
 
-    /* RING */
+    /* ENERGY RIGHT */
+
+    energySummary: {
+      width: 132,
+
+      alignItems:
+        "center",
+
+      gap: 9,
+    },
 
     ringOuter: {
-      width: 126,
+      width: 116,
 
-      height: 126,
+      height: 116,
 
-      borderWidth: 9,
+      borderWidth: 8,
 
       borderColor:
         colors.maize,
 
-      borderRadius: 63,
+      borderRadius: 58,
 
       backgroundColor:
         "#192A40",
@@ -3222,11 +3713,11 @@ const styles =
     },
 
     ringInner: {
-      width: 96,
+      width: 91,
 
-      height: 96,
+      height: 91,
 
-      borderRadius: 48,
+      borderRadius: 46,
 
       backgroundColor:
         colors.navy,
@@ -3242,7 +3733,7 @@ const styles =
       color:
         "#FFFFFF",
 
-      fontSize: 20,
+      fontSize: 19,
 
       fontWeight:
         "800",
@@ -3254,7 +3745,7 @@ const styles =
       color:
         "#AEB9C7",
 
-      fontSize: 7,
+      fontSize: 6,
     },
 
     ringPercent: {
@@ -3267,6 +3758,211 @@ const styles =
 
       fontWeight:
         "700",
+    },
+
+    carbonBadge: {
+      width: 116,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 7,
+
+      paddingVertical: 7,
+
+      paddingHorizontal:
+        8,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#46566C",
+
+      borderRadius: 10,
+
+      backgroundColor:
+        "#1B304B",
+    },
+
+    carbonBadgeIcon: {
+      color:
+        "#8BC7A5",
+
+      fontSize: 15,
+
+      fontWeight:
+        "800",
+    },
+
+    carbonBadgeEyebrow: {
+      color:
+        "#9FACBA",
+
+      fontSize: 5,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        0.8,
+    },
+
+    carbonBadgeLevel: {
+      marginTop: 1,
+
+      color:
+        "#FFFFFF",
+
+      fontSize: 9,
+
+      fontWeight:
+        "900",
+    },
+
+    /* CARBON */
+
+    carbonCard: {
+      marginTop: 12,
+
+      padding: 15,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#DCE6DF",
+
+      borderRadius: 15,
+
+      backgroundColor:
+        "#F1F7F3",
+    },
+
+    carbonCardTop: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "space-between",
+    },
+
+    carbonCardTitle: {
+      marginTop: 3,
+
+      color:
+        colors.navy,
+
+      fontSize: 13,
+
+      fontWeight:
+        "800",
+    },
+
+    carbonStatusPill: {
+      minWidth: 65,
+
+      paddingHorizontal:
+        9,
+
+      paddingVertical: 6,
+
+      borderRadius: 9,
+
+      backgroundColor:
+        "#FFFFFF",
+
+      alignItems:
+        "center",
+    },
+
+    carbonStatusText: {
+      color:
+        "#8A9198",
+
+      fontSize: 8,
+
+      fontWeight:
+        "900",
+    },
+
+    carbonCounts: {
+      flexDirection:
+        "row",
+
+      justifyContent:
+        "space-between",
+
+      marginTop: 15,
+
+      paddingTop: 12,
+
+      borderTopWidth: 1,
+
+      borderTopColor:
+        "#DDE8E0",
+    },
+
+    carbonCount: {
+      flex: 1,
+
+      alignItems:
+        "center",
+    },
+
+    carbonCountNumber: {
+      color:
+        "#8A9198",
+
+      fontSize: 15,
+
+      fontWeight:
+        "900",
+    },
+
+    carbonCountLabel: {
+      marginTop: 3,
+
+      color:
+        "#7C858C",
+
+      fontSize: 5,
+
+      fontWeight:
+        "800",
+    },
+
+    carbonExplanation: {
+      marginTop: 12,
+
+      color:
+        "#758079",
+
+      fontSize: 7,
+
+      lineHeight: 11,
+    },
+
+    carbonLow: {
+      color:
+        "#3E8A67",
+    },
+
+    carbonMedium: {
+      color:
+        "#B48A05",
+    },
+
+    carbonHigh: {
+      color:
+        "#B35D54",
     },
 
     /* SHARED */
@@ -3317,7 +4013,7 @@ const styles =
         "700",
     },
 
-    /* NUTRIENT CARD */
+    /* NUTRIENTS */
 
     nutrientCard: {
       marginTop: 16,
@@ -3539,7 +4235,7 @@ const styles =
         "800",
     },
 
-    /* TODAY LOG */
+    /* LOG */
 
     mealsSection: {
       marginTop: 23,
@@ -3604,7 +4300,7 @@ const styles =
     emptyMealDescription: {
       marginTop: 5,
 
-      maxWidth: 240,
+      maxWidth: 250,
 
       color:
         colors.muted,
@@ -3635,7 +4331,7 @@ const styles =
     },
 
     loggedFoodRow: {
-      minHeight: 88,
+      minHeight: 95,
 
       flexDirection:
         "row",
@@ -3692,6 +4388,35 @@ const styles =
       lineHeight: 11,
     },
 
+    loggedCarbonRow: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 4,
+
+      marginTop: 4,
+    },
+
+    loggedCarbonLabel: {
+      color:
+        "#858C93",
+
+      fontSize: 6,
+    },
+
+    loggedCarbonValue: {
+      color:
+        "#858C93",
+
+      fontSize: 6,
+
+      fontWeight:
+        "800",
+    },
+
     allergenText: {
       marginTop: 4,
 
@@ -3704,7 +4429,7 @@ const styles =
     },
 
     bottomSpacer: {
-      height: 100,
+      height: 25,
     },
 
     /* SERVINGS */
@@ -3978,8 +4703,7 @@ const styles =
       paddingHorizontal:
         12,
 
-      borderBottomWidth:
-        1,
+      borderBottomWidth: 1,
 
       borderBottomColor:
         "#ECEEF0",
@@ -4025,8 +4749,7 @@ const styles =
 
       borderWidth: 1,
 
-      borderBottomWidth:
-        0,
+      borderBottomWidth: 0,
 
       borderColor:
         "#DEE2E5",
@@ -4098,6 +4821,9 @@ const styles =
         colors.muted,
 
       fontSize: 8,
+
+      textAlign:
+        "center",
     },
 
     errorText: {
@@ -4113,7 +4839,7 @@ const styles =
     },
 
     menuItemRow: {
-      minHeight: 79,
+      minHeight: 82,
 
       flexDirection:
         "row",
@@ -4159,12 +4885,22 @@ const styles =
         "800",
     },
 
-    menuItemBadge: {
-      alignSelf:
-        "flex-start",
+    menuMetaRow: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      flexWrap:
+        "wrap",
+
+      gap: 7,
 
       marginTop: 6,
+    },
 
+    menuItemBadge: {
       paddingHorizontal:
         7,
 
@@ -4183,6 +4919,16 @@ const styles =
       fontSize: 6,
     },
 
+    menuCarbonText: {
+      color:
+        "#8A9198",
+
+      fontSize: 6,
+
+      fontWeight:
+        "800",
+    },
+
     mealTimeText: {
       marginTop: 4,
 
@@ -4192,7 +4938,7 @@ const styles =
       fontSize: 6,
     },
 
-    /* ESTIMATED NUTRITION */
+    /* ESTIMATED */
 
     estimatedCard: {
       marginTop: 10,
@@ -4255,10 +5001,10 @@ const styles =
     },
 
     estimatedNutrient: {
+      flex: 1,
+
       alignItems:
         "center",
-
-      flex: 1,
     },
 
     estimatedNutrientLabel: {
@@ -4342,7 +5088,7 @@ const styles =
         "600",
     },
 
-    /* NUTRIENT CUSTOMIZATION */
+    /* NUTRIENT PICKER */
 
     nutrientPickerContent: {
       paddingHorizontal:
