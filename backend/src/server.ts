@@ -1,8 +1,13 @@
-import express from "express";
+import "dotenv/config";
+
 import cors from "cors";
 import crypto from "crypto";
 
 import { normalizeUSPhone } from "./utils/phone";
+import express from "express";
+
+import diningRouter from "./routes/dining.js";
+import recommendationsRouter from "./routes/recommendations.js";
 
 const app = express();
 const PORT = 3000;
@@ -192,4 +197,26 @@ app.post("/auth/phone/verify-code", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Maize backend running on port ${PORT}`);
+const PORT = 3000;
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+  });
+});
+
+app.use(
+  "/api/dining",
+  diningRouter
+);
+
+app.use(
+  "/api/recommendations",
+  recommendationsRouter
+);
+
+app.listen(PORT, () => {
+  console.log(
+    `Server running on port ${PORT}`
+  );
 });
