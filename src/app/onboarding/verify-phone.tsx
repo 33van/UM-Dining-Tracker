@@ -1,25 +1,28 @@
 import { useState } from "react";
-import { API_URL } from "../../services/api";
+
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { router, useLocalSearchParams } from "expo-router";
 
 import { colors } from "../../constants/theme";
 import { useOnboarding } from "../../context/OnboardingContext";
+import { API_URL } from "../../services/api";
 
 export default function VerifyPhoneScreen() {
-    
   const params = useLocalSearchParams<{ phone: string }>();
 
   const phone = params.phone;
@@ -27,68 +30,89 @@ export default function VerifyPhoneScreen() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+
   const { setPhone } = useOnboarding();
 
+  // --------------------------------------------------
+  // Verify code
+  // --------------------------------------------------
+
   async function verifyCode() {
+    Keyboard.dismiss();
 
-
-  if (!phone) {
-    Alert.alert("Error", "Phone number is missing.");
-    return;
-  }
-
-  if (code.length !== 8) {
-    Alert.alert(
-      "Invalid code",
-      "Enter the 8-character verification code."
-    );
-    return;
-  }
-
-  try {
-    setLoading(true);
-
-    const response = await fetch(
-      `${API_URL}/auth/phone/verify-code`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          phone,
-          code,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
+    if (!phone) {
       Alert.alert(
-        "Verification failed",
-        data.error ?? "The code could not be verified."
+        "Error",
+        "Phone number is missing."
       );
+
       return;
     }
 
-    setPhone(phone);
+    if (code.length !== 8) {
+      Alert.alert(
+        "Invalid code",
+        "Enter the 8-character verification code."
+      );
 
-    router.replace("/onboarding/about");
+      return;
+    }
 
-  } catch (error) {
-    console.error("VERIFY ERROR:", error);
+    try {
+      setLoading(true);
 
-    Alert.alert(
-      "Connection error",
-      "Could not connect to the Maize server."
-    );
-  } finally {
-    setLoading(false);
+      const response = await fetch(
+        `${API_URL}/auth/phone/verify-code`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            phone,
+            code,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert(
+          "Verification failed",
+          data.error ?? "The code could not be verified."
+        );
+
+        return;
+      }
+
+      setPhone(phone);
+
+      router.replace("/onboarding/about");
+    } catch (error) {
+      console.error(
+        "VERIFY ERROR:",
+        error
+      );
+
+      Alert.alert(
+        "Connection error",
+        "Could not connect to the Maize server."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
-}
+
+  // --------------------------------------------------
+  // Resend code
+  // --------------------------------------------------
 
   async function resendCode() {
+    Keyboard.dismiss();
+
     if (!phone) {
       return;
     }
@@ -97,7 +121,7 @@ export default function VerifyPhoneScreen() {
       setResending(true);
 
       const response = await fetch(
-        "http://{API_URL}:3000/auth/phone/send-code",
+        `${API_URL}/auth/phone/send-code`,
         {
           method: "POST",
 
@@ -129,7 +153,10 @@ export default function VerifyPhoneScreen() {
         "A new verification code has been generated."
       );
     } catch (error) {
-      console.error(error);
+      console.error(
+        "RESEND ERROR:",
+        error
+      );
 
       Alert.alert(
         "Connection error",
@@ -140,18 +167,40 @@ export default function VerifyPhoneScreen() {
     }
   }
 
+  // --------------------------------------------------
+  // Screen
+  // --------------------------------------------------
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : undefined
+        }
       >
-        <View style={styles.content}>
-          {/* Brand */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={
+            Platform.OS === "ios"
+              ? "interactive"
+              : "on-drag"
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ----------------------------------------
+              Brand
+          ----------------------------------------- */}
 
           <View style={styles.brand}>
             <View style={styles.brandMark}>
-              <Text style={styles.brandM}>M</Text>
+              <Text style={styles.brandM}>
+                M
+              </Text>
             </View>
 
             <Text style={styles.brandText}>
@@ -159,7 +208,9 @@ export default function VerifyPhoneScreen() {
             </Text>
           </View>
 
-          {/* Header */}
+          {/* ----------------------------------------
+              Header
+          ----------------------------------------- */}
 
           <Text style={styles.eyebrow}>
             PHONE VERIFICATION
@@ -177,7 +228,9 @@ export default function VerifyPhoneScreen() {
             {formatPhoneForDisplay(phone)}
           </Text>
 
-          {/* Code input */}
+          {/* ----------------------------------------
+              Verification code
+          ----------------------------------------- */}
 
           <Text style={styles.label}>
             VERIFICATION CODE
@@ -193,9 +246,15 @@ export default function VerifyPhoneScreen() {
             placeholder="12345678"
             placeholderTextColor="#A3A8AF"
             textAlign="center"
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              Keyboard.dismiss();
+            }}
           />
 
-          {/* Verify */}
+          {/* ----------------------------------------
+              Verify button
+          ----------------------------------------- */}
 
           <Pressable
             style={[
@@ -206,7 +265,9 @@ export default function VerifyPhoneScreen() {
             onPress={verifyCode}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator
+                color="#FFFFFF"
+              />
             ) : (
               <Text style={styles.verifyButtonText}>
                 Verify phone number
@@ -214,7 +275,9 @@ export default function VerifyPhoneScreen() {
             )}
           </Pressable>
 
-          {/* Resend */}
+          {/* ----------------------------------------
+              Resend
+          ----------------------------------------- */}
 
           <View style={styles.resendContainer}>
             <Text style={styles.resendText}>
@@ -226,36 +289,50 @@ export default function VerifyPhoneScreen() {
               onPress={resendCode}
             >
               <Text style={styles.resendButton}>
-                {resending ? "Sending..." : "Resend code"}
+                {resending
+                  ? "Sending..."
+                  : "Resend code"}
               </Text>
             </Pressable>
           </View>
 
-          {/* Change number */}
+          {/* ----------------------------------------
+              Change phone number
+          ----------------------------------------- */}
 
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              Keyboard.dismiss();
+              router.back();
+            }}
           >
             <Text style={styles.changeNumber}>
               ← Use a different phone number
             </Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+// --------------------------------------------------
+// Format phone number
+// --------------------------------------------------
 
-function formatPhoneForDisplay(phone?: string): string {
+function formatPhoneForDisplay(
+  phone?: string
+): string {
   if (!phone) {
     return "";
   }
 
-  const digits = phone.replace(/\D/g, "");
+  const digits =
+    phone.replace(/\D/g, "");
 
   const tenDigits =
-    digits.length === 11 && digits.startsWith("1")
+    digits.length === 11 &&
+    digits.startsWith("1")
       ? digits.slice(1)
       : digits;
 
@@ -263,12 +340,18 @@ function formatPhoneForDisplay(phone?: string): string {
     return phone;
   }
 
-  return `(${tenDigits.slice(0, 3)}) ${tenDigits.slice(
+  return `(${tenDigits.slice(
+    0,
+    3
+  )}) ${tenDigits.slice(
     3,
     6
   )}-${tenDigits.slice(6)}`;
 }
 
+// --------------------------------------------------
+// Styles
+// --------------------------------------------------
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -280,92 +363,137 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  content: {
+  scrollView: {
     flex: 1,
+  },
+
+  content: {
+    flexGrow: 1,
+
     paddingHorizontal: 24,
     paddingTop: 30,
+    paddingBottom: 40,
   },
+
+  // ------------------------------------------------
+  // Brand
+  // ------------------------------------------------
 
   brand: {
     flexDirection: "row",
     alignItems: "center",
+
     gap: 9,
+
     marginBottom: 65,
   },
 
   brandMark: {
     width: 27,
     height: 27,
+
     borderRadius: 7,
+
     backgroundColor: colors.navy,
+
     alignItems: "center",
     justifyContent: "center",
   },
 
   brandM: {
     color: colors.maize,
+
     fontWeight: "900",
   },
 
   brandText: {
     color: colors.navy,
+
     fontSize: 21,
     fontWeight: "800",
   },
 
+  // ------------------------------------------------
+  // Header
+  // ------------------------------------------------
+
   eyebrow: {
     color: "#777F89",
+
     fontSize: 10,
     fontWeight: "700",
+
     letterSpacing: 1.5,
   },
 
   title: {
     marginTop: 8,
+
     color: colors.navy,
+
     fontSize: 30,
     fontWeight: "800",
   },
 
   description: {
     marginTop: 10,
+
     color: colors.muted,
+
     fontSize: 13,
   },
 
   phone: {
     marginTop: 5,
     marginBottom: 35,
+
     color: colors.navy,
+
     fontSize: 15,
     fontWeight: "700",
   },
 
+  // ------------------------------------------------
+  // Code input
+  // ------------------------------------------------
+
   label: {
     marginBottom: 8,
+
     color: "#59616D",
+
     fontSize: 9,
     fontWeight: "700",
+
     letterSpacing: 1.2,
   },
 
   codeInput: {
     height: 58,
+
     borderWidth: 1,
     borderColor: "#D8DBDF",
     borderRadius: 12,
+
     backgroundColor: colors.white,
 
     color: colors.navy,
 
     fontSize: 22,
     fontWeight: "700",
+
     letterSpacing: 4,
   },
 
+  // ------------------------------------------------
+  // Verify button
+  // ------------------------------------------------
+
   verifyButton: {
     height: 51,
+
     marginTop: 16,
+
     borderRadius: 12,
 
     backgroundColor: colors.navy,
@@ -380,28 +508,41 @@ const styles = StyleSheet.create({
 
   verifyButtonText: {
     color: "#FFFFFF",
+
     fontSize: 12,
     fontWeight: "700",
   },
+
+  // ------------------------------------------------
+  // Resend
+  // ------------------------------------------------
 
   resendContainer: {
     marginTop: 24,
 
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "center",
+
     gap: 5,
   },
 
   resendText: {
     color: colors.muted,
+
     fontSize: 11,
   },
 
   resendButton: {
     color: colors.blue,
+
     fontSize: 11,
     fontWeight: "700",
   },
+
+  // ------------------------------------------------
+  // Change number
+  // ------------------------------------------------
 
   changeNumber: {
     marginTop: 30,

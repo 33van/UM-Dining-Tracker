@@ -1,97 +1,101 @@
 import { useState } from "react";
-import { API_URL } from "../../services/api";
 
-// import { colors } from "../../constants/theme";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { colors } from "../../constants/theme";
 
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { normalizeUSPhone } from "../../utils/phone";
 import { router } from "expo-router";
-import { Alert } from "react-native";
 
+import { colors } from "../../constants/theme";
+import { API_URL } from "../../services/api";
+import { normalizeUSPhone } from "../../utils/phone";
 
 export default function AccountScreen() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
-
   async function handlePhoneLogin() {
-
-   const normalizedPhone = normalizeUSPhone(phone);
-
+    const normalizedPhone = normalizeUSPhone(phone);
 
     if (!normalizedPhone) {
       Alert.alert(
         "Invalid phone number",
         "Enter a valid 10-digit US phone number."
       );
+
       return;
     }
-  try {
-    setLoading(true);
 
+    try {
+      setLoading(true);
 
-    const response = await fetch(
-      `${API_URL}/auth/phone/send-code`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          phone: normalizedPhone,
-        }),
-      }
-    );
+      const response = await fetch(
+        `${API_URL}/auth/phone/send-code`,
+        {
+          method: "POST",
 
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-
-    const data = await response.json();
-
-
-
-    if (!response.ok) {
-      Alert.alert(
-        "Couldn't send code",
-        data.error ?? "Unable to send verification code."
+          body: JSON.stringify({
+            phone: normalizedPhone,
+          }),
+        }
       );
-      return;
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert(
+          "Couldn't send code",
+          data.error ?? "Unable to send verification code."
+        );
+
+        return;
+      }
+
+      router.push({
+        pathname: "/onboarding/verify-phone",
+
+        params: {
+          phone: normalizedPhone,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "PHONE LOGIN ERROR:",
+        error
+      );
+
+      Alert.alert(
+        "Connection error",
+        "Could not connect to the backend."
+      );
+    } finally {
+      setLoading(false);
     }
-
-
-    router.push({
-      pathname: "/onboarding/verify-phone",
-      params: {
-        phone: normalizedPhone,
-      },
-    });
-  } catch (error) {
-    console.error("PHONE LOGIN ERROR:", error);
-
-    Alert.alert(
-      "Connection error",
-      "Could not connect to the backend."
-    );
-  } finally {
-    setLoading(false);
   }
-}
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : undefined
+        }
       >
         {/* Header */}
         <View style={styles.header}>
@@ -104,19 +108,45 @@ export default function AccountScreen() {
 
         {/* Step indicator */}
         <View style={styles.stepper}>
-          <Step number="01" label="Account" active />
-          <Step number="02" label="About you" />
-          <Step number="03" label="Goals" />
-          <Step number="04" label="Plan" />
+          <Step
+            number="01"
+            label="Account"
+            active
+          />
+
+          <Step
+            number="02"
+            label="About you"
+          />
+
+          <Step
+            number="03"
+            label="Goals"
+          />
+
+          <Step
+            number="04"
+            label="Plan"
+          />
         </View>
 
-        {/* Main content */}
-        <View style={styles.content}>
+        {/* Scrollable main content */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
           <View style={styles.logoBox}>
-            <Text style={styles.bigM}>M</Text>
+            <Text style={styles.bigM}>
+              M
+            </Text>
 
             <View style={styles.verifiedBadge}>
-              <Text style={styles.check}>✓</Text>
+              <Text style={styles.check}>
+                ✓
+              </Text>
             </View>
           </View>
 
@@ -132,9 +162,9 @@ export default function AccountScreen() {
             Enter your mobile phone number to get started.
           </Text>
 
-          {/* Toggle */}
+          {/* Phone input */}
           <Text style={styles.label}>
-          MOBILE PHONE
+            MOBILE PHONE
           </Text>
 
           <View style={styles.inputContainer}>
@@ -152,8 +182,12 @@ export default function AccountScreen() {
             />
           </View>
 
+          {/* Continue button */}
           <Pressable
-            style={styles.continueButton}
+            style={[
+              styles.continueButton,
+              loading && styles.disabledButton,
+            ]}
             disabled={loading}
             onPress={handlePhoneLogin}
           >
@@ -169,28 +203,33 @@ export default function AccountScreen() {
                 : "Text me a verification code"}
             </Text>
 
-            <Text style={styles.arrow}>›</Text>
+            <Text style={styles.arrow}>
+              ›
+            </Text>
           </Pressable>
 
           <Text style={styles.privacy}>
             Your health information stays private and is never
             shared with the university.
           </Text>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-  }
-
+}
 
 function Brand() {
   return (
     <View style={styles.brand}>
       <View style={styles.brandMark}>
-        <Text style={styles.brandM}>M</Text>
+        <Text style={styles.brandM}>
+          M
+        </Text>
       </View>
 
-      <Text style={styles.brandText}>maize</Text>
+      <Text style={styles.brandText}>
+        maize
+      </Text>
     </View>
   );
 }
@@ -246,7 +285,9 @@ const styles = StyleSheet.create({
 
   header: {
     height: 70,
+
     paddingHorizontal: 22,
+
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -255,32 +296,39 @@ const styles = StyleSheet.create({
   brand: {
     flexDirection: "row",
     alignItems: "center",
+
     gap: 9,
   },
 
   brandMark: {
     width: 27,
     height: 27,
+
     borderRadius: 7,
+
     backgroundColor: colors.navy,
+
     alignItems: "center",
     justifyContent: "center",
   },
 
   brandM: {
     color: colors.maize,
+
     fontSize: 15,
     fontWeight: "900",
   },
 
   brandText: {
     color: colors.navy,
+
     fontSize: 21,
     fontWeight: "800",
   },
 
   stepText: {
     color: colors.muted,
+
     fontSize: 11,
     fontWeight: "600",
   },
@@ -288,22 +336,28 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: "row",
     justifyContent: "space-around",
+
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
+
     paddingBottom: 14,
   },
 
   step: {
     alignItems: "center",
+
     gap: 5,
   },
 
   stepCircle: {
     width: 28,
     height: 28,
+
     borderRadius: 14,
+
     borderWidth: 1,
     borderColor: "#D9DCDF",
+
     alignItems: "center",
     justifyContent: "center",
   },
@@ -315,6 +369,7 @@ const styles = StyleSheet.create({
 
   stepNumber: {
     color: "#A3A8AF",
+
     fontSize: 9,
     fontWeight: "700",
   },
@@ -325,6 +380,7 @@ const styles = StyleSheet.create({
 
   stepLabel: {
     color: "#A3A8AF",
+
     fontSize: 9,
     fontWeight: "600",
   },
@@ -333,151 +389,216 @@ const styles = StyleSheet.create({
     color: colors.navy,
   },
 
-  content: {
+  scrollView: {
     flex: 1,
+  },
+
+  content: {
+    flexGrow: 1,
+
     paddingHorizontal: 24,
     paddingTop: 35,
+
+    // Large amount of extra space
+    // so you can scroll far past the button
+    paddingBottom: 700,
   },
 
   logoBox: {
     position: "relative",
+
     alignSelf: "center",
+
     width: 108,
     height: 108,
+
     borderRadius: 31,
+
     backgroundColor: colors.navy,
+
     alignItems: "center",
     justifyContent: "center",
+
     marginBottom: 30,
-    transform: [{ rotate: "-3deg" }],
+
+    transform: [
+      {
+        rotate: "-3deg",
+      },
+    ],
   },
 
   bigM: {
     color: colors.maize,
+
     fontSize: 57,
     fontWeight: "900",
   },
 
   verifiedBadge: {
     position: "absolute",
+
     right: -10,
     bottom: -8,
+
     width: 39,
     height: 39,
+
     borderRadius: 20,
+
     borderWidth: 4,
     borderColor: "#FBFBF8",
+
     backgroundColor: "#43856D",
+
     alignItems: "center",
     justifyContent: "center",
   },
 
   check: {
     color: "white",
+
     fontSize: 18,
     fontWeight: "800",
   },
 
   eyebrow: {
     color: "#777F89",
+
     fontSize: 10,
     fontWeight: "700",
+
     letterSpacing: 1.5,
   },
 
   title: {
     marginTop: 7,
+
     color: colors.navy,
+
     fontSize: 29,
     lineHeight: 34,
+
     fontWeight: "800",
+
     letterSpacing: -1,
   },
 
   description: {
     marginTop: 8,
     marginBottom: 25,
+
     color: colors.muted,
+
     fontSize: 13,
     lineHeight: 20,
   },
 
   label: {
     marginBottom: 7,
+
     color: "#59616D",
+
     fontSize: 9,
     fontWeight: "700",
+
     letterSpacing: 1.2,
   },
 
   inputContainer: {
     height: 49,
+
     flexDirection: "row",
     alignItems: "center",
+
     paddingHorizontal: 13,
+
     borderWidth: 1,
     borderColor: "#D8DBDF",
     borderRadius: 12,
+
     backgroundColor: "#FFFFFF",
   },
 
   inputPrefix: {
     color: colors.navy,
+
     fontWeight: "700",
   },
 
   input: {
     flex: 1,
+
     paddingHorizontal: 7,
+
     color: colors.navy,
+
     fontSize: 13,
     fontWeight: "600",
   },
 
-
   continueButton: {
     height: 51,
+
     marginTop: 13,
     paddingHorizontal: 15,
+
     borderRadius: 12,
+
     backgroundColor: colors.navy,
+
     flexDirection: "row",
     alignItems: "center",
+
     gap: 10,
+  },
+
+  disabledButton: {
+    opacity: 0.6,
   },
 
   phoneIcon: {
     width: 25,
     height: 25,
+
     borderRadius: 7,
+
     backgroundColor: "#1678C2",
+
     alignItems: "center",
     justifyContent: "center",
   },
 
   phoneIconText: {
     color: "#FFFFFF",
+
     fontWeight: "800",
   },
 
   continueText: {
     flex: 1,
+
     color: "#FFFFFF",
+
     fontSize: 11,
     fontWeight: "700",
   },
 
   arrow: {
     color: "#FFFFFF",
+
     fontSize: 25,
   },
 
   privacy: {
     marginTop: 14,
     marginHorizontal: 20,
+
     color: "#9298A0",
+
     fontSize: 9,
     lineHeight: 14,
+
     textAlign: "center",
   },
 });
