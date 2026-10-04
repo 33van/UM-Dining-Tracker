@@ -192,12 +192,8 @@ app.post("/auth/phone/verify-code", (req, res) => {
 
 
 // ------------------------------------------------------
-// Start server
+// API Routes
 // ------------------------------------------------------
-
-app.listen(PORT, () => {
-  console.log(`Maize backend running on port ${PORT}`);
-const PORT = 3000;
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -205,18 +201,15 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.use(
-  "/api/dining",
-  diningRouter
-);
+app.use("/api/dining", diningRouter);
 
-app.use(
-  "/api/recommendations",
-  recommendationsRouter
-);
+app.use("/api/recommendations", recommendationsRouter);
+
+
+// ------------------------------------------------------
+// Start server
+// ------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(
-    `Server running on port ${PORT}`
-  );
+  console.log(`Maize backend running on port ${PORT}`);
 });
