@@ -1,13 +1,13 @@
 import {
-  createContext,
-  ReactNode,
-  useContext,
-  useState,
+    createContext,
+    ReactNode,
+    useContext,
+    useState,
 } from "react";
 
 import {
-  Gender,
-  UserProfile,
+    Gender,
+    UserProfile,
 } from "../types/UserProfile";
 
 type BodyInfo = {

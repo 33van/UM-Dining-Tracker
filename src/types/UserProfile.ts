@@ -5,7 +5,6 @@ export type Gender =
   | "Prefer not to say";
 
 export type UserProfile = {
-  // Authentication
   phone: string;
 
   // Body information
@@ -15,11 +14,14 @@ export type UserProfile = {
   age?: number;
   gender?: Gender;
 
-  // Health / dietary filtering
+  // Health
   healthConsiderations: string[];
   allergies: string[];
 
   // Goals
   calorieGoal?: number;
   foodPreferences: string[];
+
+  // Integrations
+  googleCalendarConnected?: boolean;
 };
