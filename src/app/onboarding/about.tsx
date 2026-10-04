@@ -108,61 +108,122 @@ export default function AboutScreen() {
     };
   }
 
-  function handleContinue() {
-    const parsedHeight = parseHeight();
+  function handleHeightChange(input: string) {
+  // Strip everything except numbers.
+  const digits = input.replace(/\D/g, "");
 
-    const weightNumber = Number(weight);
-    const ageNumber = Number(age);
-
-    if (!parsedHeight) {
-      Alert.alert(
-        "Invalid height",
-        `Enter your height like 5' 7".`
-      );
-      return;
-    }
-
-    if (
-      !weight ||
-      Number.isNaN(weightNumber) ||
-      weightNumber <= 0
-    ) {
-      Alert.alert(
-        "Invalid weight",
-        "Enter a valid weight."
-      );
-      return;
-    }
-
-    if (
-      !age ||
-      Number.isNaN(ageNumber) ||
-      ageNumber <= 0
-    ) {
-      Alert.alert(
-        "Invalid age",
-        "Enter a valid age."
-      );
-      return;
-    }
-
-    const allergyList = allergies
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    setBodyInfo({
-      heightFeet: parsedHeight.feet,
-      heightInches: parsedHeight.inches,
-      weightLbs: weightNumber,
-      age: ageNumber,
-      gender,
-      healthConsiderations: conditions,
-      allergies: allergyList,
-    });
-
-    router.push("/onboarding/goals");
+  if (digits.length === 0) {
+    setHeight("");
+    return;
   }
+
+  // Limit input to:
+  // 1 digit for feet
+  // 2 digits for inches
+  //
+  // Example: 511 → 5' 11"
+  const limited = digits.slice(0, 3);
+
+  const feet = limited.charAt(0);
+  const inches = limited.slice(1);
+
+  // User has only entered feet.
+  //
+  // 5 → 5'
+  if (limited.length === 1) {
+    setHeight(`${feet}'`);
+    return;
+  }
+
+  // User has entered feet + inches.
+  //
+  // 57  → 5' 7"
+  // 511 → 5' 11"
+  setHeight(`${feet}' ${inches}"`);
+}
+
+  function handleContinue() {
+  const parsedHeight = parseHeight();
+
+  const weightNumber = Number(weight);
+  const ageNumber = Number(age);
+
+  // Validate height
+  if (!parsedHeight) {
+    Alert.alert(
+      "Invalid height",
+      `Enter your height like 5' 7".`
+    );
+    return;
+  }
+
+  // Validate weight
+  if (
+    !weight ||
+    Number.isNaN(weightNumber) ||
+    weightNumber <= 0
+  ) {
+    Alert.alert(
+      "Invalid weight",
+      "Enter a valid weight."
+    );
+    return;
+  }
+
+  // Validate age
+  if (
+    !age ||
+    Number.isNaN(ageNumber) ||
+    ageNumber <= 0
+  ) {
+    Alert.alert(
+      "Invalid age",
+      "Enter a valid age."
+    );
+    return;
+  }
+
+  // Convert comma-separated allergies into an array.
+  // Example:
+  // "Peanuts, Milk" -> ["peanuts", "milk"]
+  const allergyList = [
+    ...new Set(
+      allergies
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+
+  // Body data we're about to save
+  const bodyInfo = {
+    heightFeet: parsedHeight.feet,
+    heightInches: parsedHeight.inches,
+    weightLbs: weightNumber,
+    age: ageNumber,
+    gender,
+    healthConsiderations: conditions,
+    allergies: allergyList,
+  };
+
+  // Build what the complete UserProfile will look like
+  const updatedProfile = {
+    ...profile,
+    ...bodyInfo,
+  };
+
+  // Print it to the Expo terminal
+  console.log("=================================");
+  console.log("UPDATED USER PROFILE");
+  console.log(JSON.stringify(updatedProfile, null, 2));
+  console.log("=================================");
+
+  // Store the new body information in OnboardingContext
+  setBodyInfo(bodyInfo);
+
+  // Continue to next onboarding screen
+  router.push("/onboarding/goals");
+}
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -242,11 +303,12 @@ export default function AboutScreen() {
                   <TextInput
                     style={styles.centerInput}
                     value={height}
-                    onChangeText={setHeight}
+                    onChangeText={handleHeightChange}
                     placeholder={`5' 7"`}
                     placeholderTextColor="#A3A8AF"
-                    keyboardType="numbers-and-punctuation"
-                  />
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    />
 
                   <Text style={styles.inputUnit}>
                     ft / in

@@ -26,9 +26,9 @@ export default function AccountScreen() {
 
 
   async function handlePhoneLogin() {
-   console.log("RAW PHONE:", phone);
+
    const normalizedPhone = normalizeUSPhone(phone);
-   console.log("NORMALIZED PHONE:", normalizedPhone);
+
 
     if (!normalizedPhone) {
       Alert.alert(
@@ -54,11 +54,11 @@ export default function AccountScreen() {
       }
     );
 
-    console.log("6. Response status:", response.status);
+
 
     const data = await response.json();
 
-    console.log("7. Response:", data);
+
 
     if (!response.ok) {
       Alert.alert(
@@ -68,7 +68,6 @@ export default function AccountScreen() {
       return;
     }
 
-    console.log("8. Navigating to verification screen");
 
     router.push({
       pathname: "/onboarding/verify-phone",

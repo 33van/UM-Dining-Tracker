@@ -10,20 +10,23 @@ import {
   UserProfile,
 } from "../types/UserProfile";
 
+type BodyInfo = {
+  heightFeet: number;
+  heightInches: number;
+  weightLbs: number;
+  age: number;
+  gender: Gender;
+
+  healthConsiderations: string[];
+  allergies: string[];
+};
+
 type OnboardingContextType = {
   profile: UserProfile;
 
   setPhone: (phone: string) => void;
 
-  setBodyInfo: (info: {
-    heightFeet: number;
-    heightInches: number;
-    weightLbs: number;
-    age: number;
-    gender: Gender;
-    healthConsiderations: string[];
-    allergies: string[];
-  }) => void;
+  setBodyInfo: (info: BodyInfo) => void;
 };
 
 const OnboardingContext =
@@ -36,12 +39,13 @@ export function OnboardingProvider({
 }: {
   children: ReactNode;
 }) {
-  const [profile, setProfile] = useState<UserProfile>({
-    phone: "",
-    healthConsiderations: [],
-    allergies: [],
-    foodPreferences: [],
-  });
+  const [profile, setProfile] =
+    useState<UserProfile>({
+      phone: "",
+      healthConsiderations: [],
+      allergies: [],
+      foodPreferences: [],
+    });
 
   function setPhone(phone: string) {
     setProfile((current) => ({
@@ -50,15 +54,7 @@ export function OnboardingProvider({
     }));
   }
 
-  function setBodyInfo(info: {
-    heightFeet: number;
-    heightInches: number;
-    weightLbs: number;
-    age: number;
-    gender: Gender;
-    healthConsiderations: string[];
-    allergies: string[];
-  }) {
+  function setBodyInfo(info: BodyInfo) {
     setProfile((current) => ({
       ...current,
       ...info,
