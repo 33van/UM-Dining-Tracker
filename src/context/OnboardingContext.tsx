@@ -3,8 +3,13 @@ import {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useState,
 } from "react";
+
+import {
+  loadProfile,
+} from "../services/session";
 
 import { FoodPreference } from "../constants/foodPreferences";
 import { CalendarSession } from "../types/CalendarSession";
@@ -41,6 +46,7 @@ type OnboardingContextType = {
   profile: UserProfile;
   calendarSession: CalendarSession | null;
   lastCalendarPullAt: number | null;
+  sessionLoading: boolean;
 
   setPlanInfo: (info: PlanInfo) => void;
 
@@ -125,7 +131,10 @@ export function OnboardingProvider({
 
   recommendationWindows: [],
   allowLocationRecommendations: true,
+  
 });
+  const [sessionLoading, setSessionLoading] =
+  useState(true);
   const setPlanInfo = useCallback((info: PlanInfo) => {
   setProfile((current) => ({
     ...current,
@@ -159,6 +168,40 @@ export function OnboardingProvider({
       ...info,
     }));
   }, []);
+
+  useEffect(() => {
+  async function restoreProfile() {
+    try {
+      const savedProfile =
+        await loadProfile();
+
+      if (savedProfile) {
+        console.log(
+          "RESTORED USER PROFILE:"
+        );
+
+        console.log(
+          JSON.stringify(
+            savedProfile,
+            null,
+            2
+          )
+        );
+
+        setProfile(savedProfile);
+      }
+    } catch (error) {
+      console.error(
+        "FAILED TO RESTORE PROFILE:",
+        error
+      );
+    } finally {
+      setSessionLoading(false);
+    }
+  }
+
+  void restoreProfile();
+}, []);
 
   // const setMealWindows = useCallback(
   // (mealWindows: MealWindows) => {
@@ -224,13 +267,15 @@ export function OnboardingProvider({
     <OnboardingContext.Provider
   value={{
     profile,
+    sessionLoading,
+
     calendarSession,
     lastCalendarPullAt,
-    setPlanInfo,
+
     setPhone,
     setBodyInfo,
     setGoalsInfo,
-    // setMealWindows,
+    setPlanInfo,
 
     saveCalendarAvailability,
     saveFreeTimeBlocks,

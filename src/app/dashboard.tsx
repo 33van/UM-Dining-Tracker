@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { requestMaizeWelcome } from "../services/welcome";
 
 import {
   Modal,
@@ -15,6 +16,8 @@ import { colors } from "../constants/theme";
 import { useOnboarding } from "../context/OnboardingContext";
 
 import  MainBottomNav  from "../components/MainBottomNav";
+
+
 
 
 type Meal = {
@@ -67,6 +70,43 @@ const NUTRIENTS = [
 
 export default function DashboardScreen() {
   const { profile } = useOnboarding();
+
+ const welcomeRequested = useRef(false);
+
+useEffect(() => {
+  if (
+    welcomeRequested.current ||
+    !profile.phone
+  ) {
+    return;
+  }
+
+  welcomeRequested.current = true;
+
+  async function welcomeUser() {
+    try {
+      const result =
+        await requestMaizeWelcome(
+          profile
+        );
+
+      console.log(
+        "MAIZE WELCOME RESULT:",
+        result
+      );
+    } catch (error) {
+      console.error(
+        "MAIZE WELCOME ERROR:",
+        error
+      );
+
+      welcomeRequested.current = false;
+    }
+  }
+
+  void welcomeUser();
+
+}, [profile.phone]);
 
   const calorieGoal =
     profile.calorieGoal ?? 2150;

@@ -120,31 +120,40 @@ export default function VerifyPhoneScreen() {
     try {
       setResending(true);
 
-      const response = await fetch(
-        `${API_URL}/auth/phone/send-code`,
-        {
-          method: "POST",
+      const response =
+  await fetch(
+    `${API_URL}/auth/phone/verify-code`,
+    {
+      method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
 
-          body: JSON.stringify({
-            phone,
-          }),
-        }
-      );
+      body: JSON.stringify({
+        phone: profile.phone,
+        code,
+      }),
+    }
+  );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         Alert.alert(
-          "Couldn't resend code",
-          data.error ?? "Please try again."
+          "Verification failed",
+          data.error ??
+            "The code is incorrect."
         );
 
         return;
       }
+
+      router.replace(
+        "/onboarding/about"
+      );
 
       setCode("");
 
