@@ -4,7 +4,6 @@ import {
   sendIMessage,
 } from "./services/photon.js";
 import {
-  loadState,
   saveState,
   saveUserProfile,
 } from "./services/profileStore.js";
@@ -244,29 +243,11 @@ app.post(
   "/api/users/plan",
   async (req, res) => {
     try {
-      console.log(
-        "1. PLAN REQUEST RECEIVED"
-      );
-
+    
       const profile =
         req.body as UserProfile;
 
-      console.log(
-        "2. PROFILE PHONE:",
-        profile.phone
-      );
-
-      /*
-       * Save the one local user's profile.
-       */
-      await saveUserProfile(
-        profile
-      );
-
-      console.log(
-        "3. PROFILE SAVED"
-      );
-
+      
       /*
        * Use the same phone number that
        * the user entered during onboarding.
@@ -275,12 +256,6 @@ app.post(
         normalizeUSPhone(
           profile.phone
         );
-
-      console.log(
-        "4. NORMALIZED PHONE:",
-        normalizedPhone
-      );
-
       if (!normalizedPhone) {
         return res
           .status(400)
@@ -290,45 +265,19 @@ app.post(
           });
       }
 
-      /*
-       * Check whether we've already sent
-       * the welcome message.
-       */
-      const state =
-  await loadState();
+console.log(
+  "SENDING MAIZE WELCOME MESSAGE TO:",
+  normalizedPhone
+);
 
-      console.log(
-        "5. STATE LOADED:",
-        state
-      );
+await sendIMessage(
+  normalizedPhone,
+  "Hi, I am Maize and I will be your personalised dining hall expert!"
+);
 
-      if (!state.welcomeSent) {
-        console.log(
-          "6. SENDING WELCOME THROUGH PHOTON"
-        );
-
-        await sendIMessage(
-          normalizedPhone,
-          "Hi, I am Maize and I will be your dining hall expert!"
-        );
-
-        console.log(
-          "7. PHOTON WELCOME SENT"
-        );
-
-        /*
-         * Only mark it sent after Photon
-         * successfully sends the iMessage.
-         */
-        await saveState({
-          ...state,
-          welcomeSent: true,
-        });
-
-        console.log(
-          "8. WELCOME STATE SAVED"
-        );
-      }
+console.log(
+  "MAIZE WELCOME MESSAGE SENT"
+);
 
       return res.json({
         success: true,
