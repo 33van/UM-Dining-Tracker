@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 // import { colors } from "../../constants/theme";
 import {
   KeyboardAvoidingView,
@@ -13,6 +14,9 @@ import {
 import { router } from "expo-router";
 
 import { colors } from "../../constants/theme";
+import { Alert } from "react-native";
+import { router } from "expo-router";
+import { normalizeUSPhone } from "../../utils/phone";
 
 export default function AccountScreen() {
   const [signInMethod, setSignInMethod] =
