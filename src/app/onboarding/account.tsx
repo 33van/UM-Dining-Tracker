@@ -64,15 +64,12 @@ export default function AccountScreen() {
 
         return;
       }
-      setPhone(normalizedPhone);
 
       router.push({
-        pathname:
-          "/onboarding/verify-phone",
+        pathname: "/onboarding/verify-phone",
 
         params: {
-          phone:
-            normalizedPhone,
+          phone: normalizedPhone,
         },
       });
     } catch (error) {
