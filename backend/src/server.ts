@@ -1,4 +1,5 @@
 import "dotenv/config";
+import type { UserProfile } from "./types/UserProfile";
 
 import cors from "cors";
 import crypto from "crypto";
@@ -209,6 +210,65 @@ app.use("/api/recommendations", recommendationsRouter);
 // ------------------------------------------------------
 // Start server
 // ------------------------------------------------------
+app.post("/api/users/plan", async (req, res) => {
+  try {
+    const profile =
+      req.body as UserProfile;
+
+    if (!profile.phone) {
+      return res.status(400).json({
+        error: "Phone number is required.",
+      });
+    }
+
+    if (!profile.calorieGoal) {
+      return res.status(400).json({
+        error: "Calorie goal is required.",
+      });
+    }
+
+    if (
+      !profile.recommendationWindows?.length
+    ) {
+      return res.status(400).json({
+        error:
+          "At least one recommendation window is required.",
+      });
+    }
+
+    console.log(
+      "========== NEW MAIZE PLAN =========="
+    );
+
+    console.log(
+      JSON.stringify(profile, null, 2)
+    );
+
+    console.log(
+      "===================================="
+    );
+
+    /*
+     * NEXT:
+     *
+     * await planService.create(profile);
+     */
+
+    return res.status(201).json({
+      success: true,
+      message: "Maize plan created.",
+    });
+  } catch (error) {
+    console.error(
+      "CREATE PLAN ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Could not create plan.",
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Maize backend running on port ${PORT}`);

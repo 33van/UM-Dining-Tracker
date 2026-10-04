@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createUserPlan } from "../../services/userPlan";
 
 import {
   Alert,
@@ -34,6 +35,9 @@ export default function PlanScreen() {
     profile,
     setPlanInfo,
   } = useOnboarding();
+
+  const [buildingPlan, setBuildingPlan] =
+  useState(false);
 
 
   const [
@@ -178,91 +182,87 @@ export default function PlanScreen() {
   /* BUILD PLAN                                 */
   /* ========================================== */
 
-  function handleBuildPlan() {
-    for (
-      const window
-      of recommendationWindows
+  async function handleBuildPlan() {
+  // Validate recommendation windows
+  for (const window of recommendationWindows) {
+    if (
+      !isValidTime(window.start) ||
+      !isValidTime(window.end)
     ) {
-      if (
-        !isValidTime(window.start) ||
-        !isValidTime(window.end)
-      ) {
-        Alert.alert(
-          "Invalid time",
-          "Enter each time in 24-hour format, such as 09:00 or 17:30."
-        );
-
-        return;
-      }
-
-
-      if (
-        timeToMinutes(window.end) <=
-        timeToMinutes(window.start)
-      ) {
-        Alert.alert(
-          "Invalid window",
-          "Each recommendation window must end after it starts."
-        );
-
-        return;
-      }
+      Alert.alert(
+        "Invalid time",
+        "Please enter a valid start and end time."
+      );
+      return;
     }
 
+    if (
+      timeToMinutes(window.end) <=
+      timeToMinutes(window.start)
+    ) {
+      Alert.alert(
+        "Invalid window",
+        "Each recommendation window must end after it starts."
+      );
+      return;
+    }
+  }
 
-    const planInfo = {
-      recommendationWindows,
-      allowLocationRecommendations,
-    };
+  const planInfo = {
+    recommendationWindows,
+    allowLocationRecommendations,
+  };
 
+  const completedProfile = {
+    ...profile,
+    ...planInfo,
+  };
 
-    const updatedProfile = {
-      ...profile,
-      ...planInfo,
-    };
+  console.log(
+    "SENDING USER PROFILE TO BACKEND:"
+  );
 
+  console.log(
+    JSON.stringify(
+      completedProfile,
+      null,
+      2
+    )
+  );
 
-    console.log(
-      "\n================================="
+  try {
+    setBuildingPlan(true);
+
+    // Send complete UserProfile to backend
+    await createUserPlan(
+      completedProfile
     );
 
-    console.log(
-      "FINAL USER PROFILE"
+    // Save Plan information locally
+    setPlanInfo(
+      planInfo
     );
 
-    console.log(
-      "================================="
+    // Go to homepage
+    router.replace("/dashboard");
+
+  } catch (error) {
+    console.error(
+      "BUILD PLAN ERROR:",
+      error
     );
-
-    console.log(
-      JSON.stringify(
-        updatedProfile,
-        null,
-        2
-      )
-    );
-
-    console.log(
-      "=================================\n"
-    );
-
-
-    setPlanInfo(planInfo);
-
-
-    /*
-     * Later:
-     *
-     * - save completed profile to backend
-     * - calculate recommendation opportunities
-     * - enter Today screen
-     */
 
     Alert.alert(
-      "Your plan is ready",
-      "Your recommendation preferences have been saved."
+      "Couldn't build your plan",
+      error instanceof Error
+        ? error.message
+        : "Please try again."
     );
+
+  } finally {
+    setBuildingPlan(false);
   }
+}
 
 
   return (
@@ -714,23 +714,25 @@ export default function PlanScreen() {
           </Pressable>
 
 
-          <Pressable
-            style={styles.buildButton}
+         <Pressable
+            style={[
+              styles.buildButton,
+              buildingPlan && {
+                opacity: 0.6,
+              },
+            ]}
+            disabled={buildingPlan}
             onPress={handleBuildPlan}
           >
-
-            <Text
-              style={styles.buildSparkle}
-            >
+            <Text style={styles.buildSparkle}>
               ✦
             </Text>
 
-            <Text
-              style={styles.buildText}
-            >
-              Build my plan
+            <Text style={styles.buildText}>
+              {buildingPlan
+                ? "Building your plan..."
+                : "Build my plan"}
             </Text>
-
           </Pressable>
 
         </View>
@@ -740,6 +742,7 @@ export default function PlanScreen() {
     </SafeAreaView>
   );
 }
+
 
 
 /* ============================================ */
