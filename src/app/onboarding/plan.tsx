@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { createUserPlan } from "../../services/userPlan";
+import {
+  saveSession,
+} from "../../services/session";
 
 import {
   Alert,
@@ -235,16 +238,27 @@ export default function PlanScreen() {
 
     // Send complete UserProfile to backend
     await createUserPlan(
-      completedProfile
-    );
+  completedProfile
+);
 
-    // Save Plan information locally
-    setPlanInfo(
-      planInfo
-    );
+setPlanInfo(planInfo);
 
-    // Go to homepage
-    router.replace("/dashboard");
+/*
+ * Persist the completed profile on
+ * the phone.
+ */
+
+await saveSession(
+  completedProfile
+);
+
+/*
+ * Onboarding is now complete.
+ */
+
+router.replace(
+  "/dashboard"
+);
 
   } catch (error) {
     console.error(

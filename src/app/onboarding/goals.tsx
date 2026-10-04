@@ -59,12 +59,11 @@ export default function GoalsScreen() {
   /* ========================================== */
 
   const [
-    preferences,
-    setPreferences,
-  ] = useState<FoodPreference[]>(
-    profile.foodPreferences ?? []
-  );
-
+  preferences,
+  setPreferences,
+] = useState<FoodPreference[]>(
+  (profile.foodPreferences ?? []) as FoodPreference[]
+);
 
   function togglePreference(
     preference: FoodPreference
@@ -1252,7 +1251,12 @@ const styles = StyleSheet.create({
   connectedText: {
     color: colors.green,
   },
-
+  calendarNotice: {
+  marginTop: 8,
+  color: colors.muted,
+  fontSize: 8,
+  lineHeight: 12,
+},
 
   /* Calendar connected status */
 
