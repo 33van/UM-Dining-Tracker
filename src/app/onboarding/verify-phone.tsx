@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { API_URL } from "../../services/api";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,8 +10,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { API_URL } from "../../services/api";
 
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -97,7 +99,7 @@ export default function VerifyPhoneScreen() {
       setResending(true);
 
       const response = await fetch(
-        "http://{API_URL}:3000/auth/phone/send-code",
+        `${API_URL}/auth/phone/send-code`,
         {
           method: "POST",
 
@@ -141,7 +143,11 @@ export default function VerifyPhoneScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+  <SafeAreaView style={styles.safeArea}>
+    <TouchableWithoutFeedback
+      onPress={Keyboard.dismiss}
+      accessible={false}
+    >
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -193,6 +199,8 @@ export default function VerifyPhoneScreen() {
             placeholder="12345678"
             placeholderTextColor="#A3A8AF"
             textAlign="center"
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
           />
 
           {/* Verify */}
@@ -203,7 +211,10 @@ export default function VerifyPhoneScreen() {
               loading && styles.disabledButton,
             ]}
             disabled={loading}
-            onPress={verifyCode}
+            onPress={() => {
+              Keyboard.dismiss();
+              verifyCode();
+            }}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -233,17 +244,16 @@ export default function VerifyPhoneScreen() {
 
           {/* Change number */}
 
-          <Pressable
-            onPress={() => router.back()}
-          >
+          <Pressable onPress={() => router.back()}>
             <Text style={styles.changeNumber}>
               ← Use a different phone number
             </Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+    </TouchableWithoutFeedback>
+  </SafeAreaView>
+);
 }
 
 
