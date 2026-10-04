@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 
 import { router } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "../../constants/theme";
 import { useOnboarding } from "../../context/OnboardingContext";
@@ -109,128 +109,124 @@ export default function AboutScreen() {
   }
 
   function handleHeightChange(input: string) {
-  // Strip everything except numbers.
-  const digits = input.replace(/\D/g, "");
+    // Keep numbers only.
+    const digits = input.replace(/\D/g, "");
 
-  if (digits.length === 0) {
-    setHeight("");
-    return;
+    if (digits.length === 0) {
+      setHeight("");
+      return;
+    }
+
+    /*
+     * Limit to:
+     * 1 digit for feet
+     * 2 digits for inches
+     *
+     * Example:
+     * 511 -> 5' 11"
+     */
+    const limited = digits.slice(0, 3);
+
+    const feet = limited.charAt(0);
+    const inches = limited.slice(1);
+
+    if (limited.length === 1) {
+      setHeight(`${feet}'`);
+      return;
+    }
+
+    setHeight(`${feet}' ${inches}"`);
   }
-
-  // Limit input to:
-  // 1 digit for feet
-  // 2 digits for inches
-  //
-  // Example: 511 → 5' 11"
-  const limited = digits.slice(0, 3);
-
-  const feet = limited.charAt(0);
-  const inches = limited.slice(1);
-
-  // User has only entered feet.
-  //
-  // 5 → 5'
-  if (limited.length === 1) {
-    setHeight(`${feet}'`);
-    return;
-  }
-
-  // User has entered feet + inches.
-  //
-  // 57  → 5' 7"
-  // 511 → 5' 11"
-  setHeight(`${feet}' ${inches}"`);
-}
 
   function handleContinue() {
-  const parsedHeight = parseHeight();
+    const parsedHeight = parseHeight();
 
-  const weightNumber = Number(weight);
-  const ageNumber = Number(age);
+    const weightNumber = Number(weight);
+    const ageNumber = Number(age);
 
-  // Validate height
-  if (!parsedHeight) {
-    Alert.alert(
-      "Invalid height",
-      `Enter your height like 5' 7".`
+    // Validate height
+    if (!parsedHeight) {
+      Alert.alert(
+        "Invalid height",
+        `Enter your height like 5' 7".`
+      );
+
+      return;
+    }
+
+    // Validate weight
+    if (
+      !weight ||
+      Number.isNaN(weightNumber) ||
+      weightNumber <= 0
+    ) {
+      Alert.alert(
+        "Invalid weight",
+        "Enter a valid weight."
+      );
+
+      return;
+    }
+
+    // Validate age
+    if (
+      !age ||
+      Number.isNaN(ageNumber) ||
+      ageNumber <= 0
+    ) {
+      Alert.alert(
+        "Invalid age",
+        "Enter a valid age."
+      );
+
+      return;
+    }
+
+    // Convert comma-separated allergies into an array.
+    const allergyList = [
+      ...new Set(
+        allergies
+          .split(",")
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean)
+      ),
+    ];
+
+    const bodyInfo = {
+      heightFeet: parsedHeight.feet,
+      heightInches: parsedHeight.inches,
+      weightLbs: weightNumber,
+      age: ageNumber,
+      gender,
+      healthConsiderations: conditions,
+      allergies: allergyList,
+    };
+
+    const updatedProfile = {
+      ...profile,
+      ...bodyInfo,
+    };
+
+    console.log("=================================");
+    console.log("UPDATED USER PROFILE");
+    console.log(
+      JSON.stringify(updatedProfile, null, 2)
     );
-    return;
+    console.log("=================================");
+
+    setBodyInfo(bodyInfo);
+
+    router.push("/onboarding/goals");
   }
-
-  // Validate weight
-  if (
-    !weight ||
-    Number.isNaN(weightNumber) ||
-    weightNumber <= 0
-  ) {
-    Alert.alert(
-      "Invalid weight",
-      "Enter a valid weight."
-    );
-    return;
-  }
-
-  // Validate age
-  if (
-    !age ||
-    Number.isNaN(ageNumber) ||
-    ageNumber <= 0
-  ) {
-    Alert.alert(
-      "Invalid age",
-      "Enter a valid age."
-    );
-    return;
-  }
-
-  // Convert comma-separated allergies into an array.
-  // Example:
-  // "Peanuts, Milk" -> ["peanuts", "milk"]
-  const allergyList = [
-    ...new Set(
-      allergies
-        .split(",")
-        .map((item) => item.trim().toLowerCase())
-        .filter(Boolean)
-    ),
-  ];
-
-  // Body data we're about to save
-  const bodyInfo = {
-    heightFeet: parsedHeight.feet,
-    heightInches: parsedHeight.inches,
-    weightLbs: weightNumber,
-    age: ageNumber,
-    gender,
-    healthConsiderations: conditions,
-    allergies: allergyList,
-  };
-
-  // Build what the complete UserProfile will look like
-  const updatedProfile = {
-    ...profile,
-    ...bodyInfo,
-  };
-
-  // Print it to the Expo terminal
-  console.log("=================================");
-  console.log("UPDATED USER PROFILE");
-  console.log(JSON.stringify(updatedProfile, null, 2));
-  console.log("=================================");
-
-  // Store the new body information in OnboardingContext
-  setBodyInfo(bodyInfo);
-
-  // Continue to next onboarding screen
-  router.push("/onboarding/goals");
-}
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={
-          Platform.OS === "ios" ? "padding" : undefined
+          Platform.OS === "ios"
+            ? "padding"
+            : undefined
         }
       >
         {/* HEADER */}
@@ -269,10 +265,19 @@ export default function AboutScreen() {
           />
         </View>
 
+        {/* EVERYTHING BELOW THIS POINT SCROLLS */}
+
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={
+            styles.scrollContent
+          }
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={
+            Platform.OS === "ios"
+              ? "interactive"
+              : "on-drag"
+          }
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
@@ -308,7 +313,7 @@ export default function AboutScreen() {
                     placeholderTextColor="#A3A8AF"
                     keyboardType="number-pad"
                     maxLength={6}
-                    />
+                  />
 
                   <Text style={styles.inputUnit}>
                     ft / in
@@ -401,7 +406,6 @@ export default function AboutScreen() {
                         <Text
                           style={[
                             styles.genderOptionText,
-
                             gender === option &&
                               styles.genderOptionSelected,
                           ]}
@@ -422,7 +426,9 @@ export default function AboutScreen() {
                 CONDITIONS & CONSIDERATIONS
               </Text>
 
-              <Text style={styles.choiceDescription}>
+              <Text
+                style={styles.choiceDescription}
+              >
                 Select any that apply so recommendations
                 work for you.
               </Text>
@@ -445,7 +451,9 @@ export default function AboutScreen() {
                       }
                     >
                       {selected && (
-                        <Text style={styles.checkmark}>
+                        <Text
+                          style={styles.checkmark}
+                        >
                           ✓
                         </Text>
                       )}
@@ -453,7 +461,6 @@ export default function AboutScreen() {
                       <Text
                         style={[
                           styles.chipText,
-
                           selected &&
                             styles.selectedChipText,
                         ]}
@@ -489,41 +496,40 @@ export default function AboutScreen() {
               </Text>
             </View>
           </View>
+
+          {/* FOOTER IS NOW INSIDE THE SCROLLVIEW */}
+
+          <View style={styles.footer}>
+            <Pressable
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.backText}>
+                Back
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.continueButton}
+              onPress={handleContinue}
+            >
+              <Text style={styles.continueText}>
+                Continue
+              </Text>
+
+              <Text style={styles.footerArrow}>
+                ›
+              </Text>
+            </Pressable>
+          </View>
         </ScrollView>
-
-        {/* FOOTER */}
-
-        <View style={styles.footer}>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backText}>
-              Back
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.continueButton}
-            onPress={handleContinue}
-          >
-            <Text style={styles.continueText}>
-              Continue
-            </Text>
-
-            <Text style={styles.footerArrow}>
-              ›
-            </Text>
-          </Pressable>
-        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-
 /* -------------------------------------------------- */
-/* BRAND                                               */
+/* BRAND                                              */
 /* -------------------------------------------------- */
 
 function Brand() {
@@ -542,9 +548,8 @@ function Brand() {
   );
 }
 
-
 /* -------------------------------------------------- */
-/* STEPPER                                             */
+/* STEPPER                                            */
 /* -------------------------------------------------- */
 
 function Step({
@@ -558,14 +563,14 @@ function Step({
   active?: boolean;
   completed?: boolean;
 }) {
-  const highlighted = active || completed;
+  const highlighted =
+    active || completed;
 
   return (
     <View style={styles.step}>
       <View
         style={[
           styles.stepCircle,
-
           highlighted &&
             styles.stepCircleHighlighted,
         ]}
@@ -573,7 +578,6 @@ function Step({
         <Text
           style={[
             styles.stepNumber,
-
             highlighted &&
               styles.stepNumberHighlighted,
           ]}
@@ -585,7 +589,6 @@ function Step({
       <Text
         style={[
           styles.stepLabel,
-
           highlighted &&
             styles.stepLabelHighlighted,
         ]}
@@ -596,10 +599,10 @@ function Step({
   );
 }
 
+/* -------------------------------------------------- */
+/* STYLES                                             */
+/* -------------------------------------------------- */
 
-/* -------------------------------------------------- */
-/* STYLES                                              */
-/* -------------------------------------------------- */
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -614,6 +617,7 @@ const styles = StyleSheet.create({
   header: {
     height: 70,
     paddingHorizontal: 22,
+
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -628,28 +632,40 @@ const styles = StyleSheet.create({
   brandMark: {
     width: 27,
     height: 27,
+
     borderRadius: 7,
+
     backgroundColor: colors.navy,
+
     alignItems: "center",
     justifyContent: "center",
-    transform: [{ rotate: "-4deg" }],
+
+    transform: [
+      {
+        rotate: "-4deg",
+      },
+    ],
   },
 
   brandM: {
     color: colors.maize,
+
     fontSize: 15,
     fontWeight: "900",
   },
 
   brandText: {
     color: colors.navy,
+
     fontSize: 21,
     fontWeight: "800",
+
     letterSpacing: -0.8,
   },
 
   stepText: {
     color: colors.muted,
+
     fontSize: 10,
     fontWeight: "600",
   },
@@ -657,26 +673,34 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: "row",
     justifyContent: "space-between",
+
     paddingHorizontal: 27,
     paddingTop: 4,
     paddingBottom: 14,
+
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
 
   step: {
     width: 65,
+
     alignItems: "center",
+
     gap: 5,
   },
 
   stepCircle: {
     width: 27,
     height: 27,
+
     borderWidth: 1,
     borderColor: "#D9DCDF",
+
     borderRadius: 14,
+
     backgroundColor: "#FBFBF8",
+
     alignItems: "center",
     justifyContent: "center",
   },
@@ -688,6 +712,7 @@ const styles = StyleSheet.create({
 
   stepNumber: {
     color: "#A3A8AF",
+
     fontSize: 8,
     fontWeight: "700",
   },
@@ -698,12 +723,14 @@ const styles = StyleSheet.create({
 
   stepLabel: {
     color: "#A3A8AF",
+
     fontSize: 8,
     fontWeight: "600",
   },
 
   stepLabelHighlighted: {
     color: colors.navy,
+
     fontWeight: "700",
   },
 
@@ -712,199 +739,269 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    paddingBottom: 110,
+    flexGrow: 1,
+
+    // Extra room below Continue button.
+    paddingBottom: 250,
   },
 
   content: {
     width: "100%",
+
     paddingHorizontal: 24,
     paddingTop: 27,
+
     alignItems: "center",
   },
 
   eyebrow: {
     color: "#777F89",
+
     fontSize: 10,
     lineHeight: 13,
     fontWeight: "700",
+
     letterSpacing: 1.5,
   },
 
   title: {
     maxWidth: 370,
+
     marginTop: 7,
     marginBottom: 8,
+
     color: colors.navy,
+
     fontSize: 29,
     lineHeight: 34,
+
     fontWeight: "800",
+
     letterSpacing: -1.1,
+
     textAlign: "center",
   },
 
   description: {
     maxWidth: 370,
+
     marginBottom: 25,
+
     color: colors.muted,
+
     fontSize: 12,
     lineHeight: 19,
+
     textAlign: "center",
   },
 
   formGrid: {
     width: "100%",
     maxWidth: 360,
+
     flexDirection: "row",
     flexWrap: "wrap",
+
     columnGap: 11,
     rowGap: 13,
   },
 
   formField: {
     width: "48%",
+
     position: "relative",
   },
 
   formLabel: {
     marginBottom: 6,
+
     color: "#59616D",
+
     fontSize: 10,
     fontWeight: "600",
+
     textAlign: "center",
   },
 
   inputShell: {
     position: "relative",
+
     height: 49,
+
     flexDirection: "row",
     alignItems: "center",
+
     paddingHorizontal: 13,
+
     borderWidth: 1,
     borderColor: "#D8DBDF",
     borderRadius: 12,
+
     backgroundColor: "#FFFFFF",
   },
 
   centerInput: {
     flex: 1,
+
     height: "100%",
+
     paddingLeft: 22,
     paddingRight: 42,
+
     color: colors.navy,
+
     fontSize: 13,
     fontWeight: "600",
+
     textAlign: "center",
   },
 
   inputUnit: {
     position: "absolute",
+
     right: 12,
+
     color: "#8A919B",
+
     fontSize: 10,
   },
 
   genderText: {
     flex: 1,
+
+    paddingLeft: 15,
+
     color: colors.navy,
+
     fontSize: 13,
     fontWeight: "600",
+
     textAlign: "center",
-    paddingLeft: 15,
   },
 
   chevron: {
     color: "#90969E",
+
     fontSize: 20,
-    transform: [{ rotate: "90deg" }],
+
+    transform: [
+      {
+        rotate: "90deg",
+      },
+    ],
   },
 
   genderMenu: {
     position: "absolute",
+
     zIndex: 100,
+
     top: 75,
     left: 0,
     right: 0,
+
     overflow: "hidden",
+
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: 12,
+
     backgroundColor: "#FFFFFF",
   },
 
   genderOption: {
     paddingHorizontal: 12,
     paddingVertical: 11,
+
     borderBottomWidth: 1,
     borderBottomColor: "#EEF0F1",
   },
 
   genderOptionText: {
     color: "#5E6671",
+
     fontSize: 10,
   },
 
   genderOptionSelected: {
     color: colors.navy,
+
     fontWeight: "700",
   },
 
   choiceSection: {
     width: "100%",
     maxWidth: 360,
+
     marginTop: 24,
   },
 
   fieldLabel: {
     marginBottom: 7,
+
     color: "#59616D",
+
     fontSize: 9,
     fontWeight: "700",
+
     letterSpacing: 1.2,
   },
 
   choiceDescription: {
     marginTop: -2,
     marginBottom: 11,
+
     color: colors.muted,
+
     fontSize: 10,
   },
 
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
+
     justifyContent: "center",
+
     gap: 8,
   },
 
   chip: {
     flexDirection: "row",
     alignItems: "center",
+
     gap: 4,
+
     paddingHorizontal: 11,
     paddingVertical: 9,
+
     borderWidth: 1,
-    borderColor: "#DAD DDF".replace(" ", ""),
+    borderColor: "#DADDDF",
     borderRadius: 10,
+
     backgroundColor: "#FFFFFF",
   },
 
   selectedChip: {
     borderColor: "#D8B900",
+
     backgroundColor: "#FFF7CF",
   },
 
   chipText: {
     color: "#5E6671",
+
     fontSize: 10,
   },
 
   selectedChipText: {
     color: "#6D5800",
+
     fontWeight: "700",
   },
 
   checkmark: {
     color: "#6D5800",
+
     fontSize: 11,
     fontWeight: "800",
   },
@@ -912,21 +1009,27 @@ const styles = StyleSheet.create({
   allergySection: {
     width: "100%",
     maxWidth: 360,
+
     marginTop: 21,
   },
 
   allergyInput: {
     minHeight: 49,
+
     justifyContent: "center",
+
     paddingHorizontal: 13,
+
     borderWidth: 1,
     borderColor: "#D8DBDF",
     borderRadius: 12,
+
     backgroundColor: "#FFFFFF",
   },
 
   allergyTextInput: {
     color: colors.navy,
+
     fontSize: 12,
     fontWeight: "500",
   },
@@ -934,61 +1037,83 @@ const styles = StyleSheet.create({
   allergyHelp: {
     marginTop: 6,
     marginHorizontal: 2,
+
     color: "#8C929B",
+
     fontSize: 8,
   },
 
+  /*
+   * IMPORTANT:
+   * No position: "absolute" here.
+   * This footer is part of the ScrollView now.
+   */
   footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    width: "100%",
+
     flexDirection: "row",
+
     gap: 10,
+
+    marginTop: 28,
+
     paddingHorizontal: 24,
-    paddingTop: 15,
-    paddingBottom: 20,
+    paddingTop: 18,
+    paddingBottom: 30,
+
     borderTopWidth: 1,
     borderTopColor: colors.line,
+
     backgroundColor: "#FBFBF8",
   },
 
   backButton: {
     width: 82,
     height: 45,
+
     alignItems: "center",
     justifyContent: "center",
+
     borderWidth: 1,
     borderColor: "#D8DBDE",
     borderRadius: 11,
+
     backgroundColor: "#FFFFFF",
   },
 
   backText: {
     color: "#68717D",
+
     fontSize: 11,
     fontWeight: "700",
   },
 
   continueButton: {
     flex: 1,
+
     height: 45,
+
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+
     gap: 7,
+
     borderRadius: 11,
+
     backgroundColor: colors.navy,
   },
 
   continueText: {
     color: "#FFFFFF",
+
     fontSize: 11,
     fontWeight: "700",
   },
 
   footerArrow: {
     color: "#FFFFFF",
+
     fontSize: 19,
     fontWeight: "600",
   },
