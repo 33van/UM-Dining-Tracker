@@ -12,11 +12,15 @@ import {
   FreeTimeBlock,
   Gender,
   UserProfile,
-  MealWindows,
+  RecommendationWindow,
+  // MealWindows,
 } from "../types/UserProfile";
 
 
-
+type PlanInfo = {
+  recommendationWindows: RecommendationWindow[];
+  allowLocationRecommendations: boolean;
+};
 type BodyInfo = {
   heightFeet: number;
   heightInches: number;
@@ -38,6 +42,8 @@ type OnboardingContextType = {
   calendarSession: CalendarSession | null;
   lastCalendarPullAt: number | null;
 
+  setPlanInfo: (info: PlanInfo) => void;
+
   setPhone: (phone: string) => void;
   setBodyInfo: (info: BodyInfo) => void;
   setGoalsInfo: (info: GoalsInfo) => void;
@@ -48,7 +54,7 @@ type OnboardingContextType = {
   saveFreeTimeBlocks: (freeTimeBlocks: FreeTimeBlock[]) => void;
   updateCalendarSession: (session: CalendarSession) => void;
   noteCalendarPull: (pulledAt: number) => void;
-  setMealWindows: (mealWindows: MealWindows) => void;
+  // setMealWindows: (mealWindows: MealWindows) => void;
 };
 
 const OnboardingContext = createContext<
@@ -111,12 +117,21 @@ export function OnboardingProvider({
   children: ReactNode;
 }) {
   const [profile, setProfile] = useState<UserProfile>({
-    phone: "",
-    healthConsiderations: [],
-    allergies: [],
-    foodPreferences: [],
-    freeTimeBlocks: [],
-  });
+  phone: "",
+  healthConsiderations: [],
+  allergies: [],
+  foodPreferences: [],
+  freeTimeBlocks: [],
+
+  recommendationWindows: [],
+  allowLocationRecommendations: true,
+});
+  const setPlanInfo = useCallback((info: PlanInfo) => {
+  setProfile((current) => ({
+    ...current,
+    ...info,
+  }));
+}, []);
 
   const [calendarSession, setCalendarSession] =
     useState<CalendarSession | null>(null);
@@ -145,15 +160,15 @@ export function OnboardingProvider({
     }));
   }, []);
 
-  const setMealWindows = useCallback(
-  (mealWindows: MealWindows) => {
-    setProfile((current) => ({
-      ...current,
-      mealWindows,
-    }));
-  },
-  []
-);
+  // const setMealWindows = useCallback(
+  // (mealWindows: MealWindows) => {
+  //   setProfile((current) => ({
+  //     ...current,
+  //     mealWindows,
+  //   }));
+  // },
+  // []
+// );
 
   const saveCalendarAvailability = useCallback(
   (
@@ -211,11 +226,11 @@ export function OnboardingProvider({
     profile,
     calendarSession,
     lastCalendarPullAt,
-
+    setPlanInfo,
     setPhone,
     setBodyInfo,
     setGoalsInfo,
-    setMealWindows,
+    // setMealWindows,
 
     saveCalendarAvailability,
     saveFreeTimeBlocks,

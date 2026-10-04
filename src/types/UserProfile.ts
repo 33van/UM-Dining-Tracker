@@ -30,19 +30,16 @@ export type UserProfile = {
   calorieGoalIsCustom?: boolean;
   foodPreferences: string[];
 
-  mealWindows?: MealWindows;
+  // mealWindows?: MealWindows;
+  recommendationWindows: RecommendationWindow[];
+allowLocationRecommendations: boolean;
 
   googleCalendarConnected?: boolean;
   freeTimeBlocks: FreeTimeBlock[];
 };
 
-export type MealTimeWindow = {
+
+export type RecommendationWindow = {
   start: string;
   end: string;
-};
-
-export type MealWindows = {
-  breakfast: MealTimeWindow;
-  lunch: MealTimeWindow;
-  dinner: MealTimeWindow;
 };
