@@ -1,5 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import type { MenuItem } from "./dining.js";
+import type {
+  UserProfile,
+} from "../types/UserProfile.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -12,6 +15,16 @@ if (!apiKey) {
 const ai = new GoogleGenAI({
   apiKey,
 });
+
+export interface CurrentNutrition {
+  caloriesConsumed: number;
+  calorieGoal: number;
+
+  nutrients: Record<
+    string,
+    number | null | undefined
+  >;
+}
 
 export interface UserPreferences {
   allergies: string[];
@@ -131,4 +144,170 @@ Rules:
   );
 
   return parsed.recommendations ?? [];
+}
+const nextMealSchema = {
+  type: "object",
+
+  properties: {
+    items: {
+      type: "array",
+
+      items: {
+        type: "object",
+
+        properties: {
+          name: {
+            type: "string",
+          },
+
+          servings: {
+            type: "number",
+          },
+        },
+
+        required: [
+          "name",
+          "servings",
+        ],
+      },
+    },
+
+    reason: {
+      type: "string",
+    },
+  },
+
+  required: [
+    "items",
+    "reason",
+  ],
+};
+export async function recommendNextMeal(
+  profile: UserProfile,
+  currentNutrition: CurrentNutrition,
+  menu: MenuItem[]
+) {
+  const remainingCalories =
+    Math.max(
+      currentNutrition.calorieGoal -
+        currentNutrition.caloriesConsumed,
+      0
+    );
+
+  const prompt = `
+You are Maize, a University of Michigan
+dining recommendation assistant.
+
+Your job is to choose the user's NEXT MEAL
+from the provided Michigan Dining menu.
+
+USER PROFILE:
+${JSON.stringify(profile, null, 2)}
+
+NUTRITION CONSUMED TODAY:
+${JSON.stringify(currentNutrition, null, 2)}
+
+REMAINING DAILY CALORIES:
+${remainingCalories}
+
+AVAILABLE MENU ITEMS:
+${JSON.stringify(menu, null, 2)}
+
+IMPORTANT RULES:
+
+1. FOOD SAFETY
+Never recommend a food that conflicts with
+the user's allergies, dietary restrictions,
+health considerations, or food preferences.
+
+2. NUTRITION
+Choose a combination of foods that helps
+the user move toward their remaining daily
+calorie and nutrient targets.
+
+Consider calories, protein, carbohydrates,
+fiber, fat, sodium, sugar, vitamins, and
+minerals when that information is available.
+
+Do not greatly overshoot the user's
+remaining calorie target.
+
+3. CARBON FOOTPRINT
+Among nutritionally appropriate foods,
+strongly prefer foods whose traits contain:
+
+"carbon footprint low"
+
+Use foods labeled:
+
+"carbon footprint medium"
+
+only when they meaningfully improve the
+nutritional quality of the meal.
+
+Avoid:
+
+"carbon footprint high"
+
+unless there is no reasonable lower-carbon
+combination that satisfies the user's
+dietary and nutritional needs.
+
+4. REAL MENU ITEMS ONLY
+You MUST only recommend foods appearing
+in AVAILABLE MENU ITEMS.
+
+The returned "name" MUST EXACTLY match
+the item's "name" from AVAILABLE MENU ITEMS.
+
+Do not rename foods.
+Do not invent foods.
+
+5. SERVINGS
+Recommend a reasonable number of servings.
+
+Use whole-number servings of at least 1.
+
+6. MEAL SIZE
+Return between 1 and 4 foods that together
+form one sensible next meal.
+
+Return a short reason explaining why this
+combination fits the user's nutrition and
+sustainability goals.
+`;
+
+  const interaction =
+    await ai.interactions.create({
+      model: "gemini-3.8-flash",
+
+      input: prompt,
+
+      response_format: {
+        type: "text",
+        mime_type:
+          "application/json",
+        schema:
+          nextMealSchema,
+      },
+    });
+
+  const parsed =
+    JSON.parse(
+      interaction.output_text ??
+        "{}"
+    );
+
+  return {
+    items:
+      Array.isArray(parsed.items)
+        ? parsed.items
+        : [],
+
+    reason:
+      typeof parsed.reason ===
+      "string"
+        ? parsed.reason
+        : "",
+  };
 }

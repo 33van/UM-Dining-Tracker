@@ -44,6 +44,7 @@ export interface MenuItem {
   cholesterolMg?: number | undefined;
   sodiumMg?: number | undefined;
   carbsG?: number | undefined;
+  fiberG?: number | undefined;
 
   calciumPercent?: number | undefined;
   ironPercent?: number | undefined;
@@ -80,27 +81,50 @@ function getNumber(text: string): number | undefined {
   6
 */
 function getNutritionValue(
+  $: cheerio.CheerioAPI,
   $nutrition: cheerio.Cheerio<any>,
   label: string
 ): number | undefined {
-  let result: number | undefined;
+  let result:
+    number | undefined;
 
   $nutrition
     .find("table.nutrition-facts tr")
     .each((_, row) => {
-      const firstCell = cheerio
-        .load(row)("td")
-        .first()
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (firstCell.startsWith(label)) {
-        const valueText = firstCell
-          .replace(label, "")
+      const firstCell =
+        $(row)
+          .find("td")
+          .first()
+          .text()
+          .replace(/\s+/g, " ")
           .trim();
 
-        result = getNumber(valueText);
+      if (!firstCell) {
+        return;
+      }
+
+      /*
+       * Examples:
+       *
+       * "Protein 6g"
+       * "Total Fat 3g"
+       * "Dietary Fiber 4g"
+       * "Sodium 3mg"
+       */
+      if (
+        firstCell
+          .toLowerCase()
+          .startsWith(
+            label.toLowerCase()
+          )
+      ) {
+        const valueText =
+          firstCell
+            .slice(label.length)
+            .trim();
+
+        result =
+          getNumber(valueText);
       }
     });
 
@@ -120,38 +144,52 @@ function getNutritionValue(
   11
 */
 function getMicronutrientPercent(
+  $: cheerio.CheerioAPI,
   $nutrition: cheerio.Cheerio<any>,
   label: string
 ): number | undefined {
-  let result: number | undefined;
+  let result:
+    number | undefined;
 
   $nutrition
-    .find("table.nutrition-facts tr")
+    .find(
+      "table.nutrition-facts tr"
+    )
     .each((_, row) => {
-      const $row = cheerio.load(row);
+      const cells =
+        $(row).find("td");
 
-      const cells = $row("td");
+      if (cells.length < 2) {
+        return;
+      }
 
-      const name = cells
-        .first()
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (name === label) {
-        const value = cells
-          .eq(1)
+      const name =
+        cells
+          .first()
           .text()
           .replace(/\s+/g, " ")
           .trim();
 
-        result = getNumber(value);
+      if (
+        name.toLowerCase() ===
+        label.toLowerCase()
+      ) {
+        const valueText =
+          cells
+            .eq(1)
+            .text()
+            .replace(/\s+/g, " ")
+            .trim();
+
+        result =
+          getNumber(
+            valueText
+          );
       }
     });
 
   return result;
 }
-
 export async function getDiningMenu(
   hall: DiningHallSlug,
   date: string
@@ -258,6 +296,15 @@ export async function getDiningMenu(
               const $nutrition =
                 $item.next(".nutrition");
 
+                if (name === "Oatmeal") {
+  console.log(
+    "OATMEAL NUTRITION HTML:"
+  );
+
+  console.log(
+    $.html($nutrition)
+  );
+}
               const allergens = $nutrition
                 .find(".allergens li")
                 .map((_, allergen) =>
@@ -272,89 +319,117 @@ export async function getDiningMenu(
                 mealTime,
 
                 name,
+calories:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Calories"
+  ),
 
-                calories:
-                  getNutritionValue(
-                    $nutrition,
-                    "Calories"
-                  ),
+totalFatG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Total Fat"
+  ),
 
-                totalFatG:
-                  getNutritionValue(
-                    $nutrition,
-                    "Total Fat"
-                  ),
+saturatedFatG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Saturated Fat"
+  ),
 
-                saturatedFatG:
-                  getNutritionValue(
-                    $nutrition,
-                    "Saturated Fat"
-                  ),
+transFatG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Trans Fat"
+  ),
 
-                transFatG:
-                  getNutritionValue(
-                    $nutrition,
-                    "Trans Fat"
-                  ),
+proteinG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Protein"
+  ),
 
-                proteinG:
-                  getNutritionValue(
-                    $nutrition,
-                    "Protein"
-                  ),
+sugarG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Sugars"
+  ),
 
-                sugarG:
-                  getNutritionValue(
-                    $nutrition,
-                    "Sugars"
-                  ),
+cholesterolMg:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Cholesterol"
+  ),
 
-                cholesterolMg:
-                  getNutritionValue(
-                    $nutrition,
-                    "Cholesterol"
-                  ),
+sodiumMg:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Sodium"
+  ),
 
-                sodiumMg:
-                  getNutritionValue(
-                    $nutrition,
-                    "Sodium"
-                  ),
+carbsG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Total Carbohydrate"
+  ),
 
-                carbsG:
-                  getNutritionValue(
-                    $nutrition,
-                    "Total Carbohydrate"
-                  ),
+fiberG:
+  getNutritionValue(
+    $,
+    $nutrition,
+    "Dietary Fiber"
+  ),
 
-                calciumPercent:
-                  getMicronutrientPercent(
-                    $nutrition,
-                    "Calcium"
-                  ),
+calciumPercent:
+  getMicronutrientPercent(
+    $,
+    $nutrition,
+    "Calcium"
+  ),
 
-                ironPercent:
-                  getMicronutrientPercent(
-                    $nutrition,
-                    "Iron"
-                  ),
+ironPercent:
+  getMicronutrientPercent(
+    $,
+    $nutrition,
+    "Iron"
+  ),
 
-                vitaminAPercent:
-                  getMicronutrientPercent(
-                    $nutrition,
-                    "Vitamin A"
-                  ),
+vitaminAPercent:
+  getMicronutrientPercent(
+    $,
+    $nutrition,
+    "Vitamin A"
+  ),
 
-                vitaminCPercent:
-                  getMicronutrientPercent(
-                    $nutrition,
-                    "Vitamin C"
-                  ),
+vitaminCPercent:
+  getMicronutrientPercent(
+    $,
+    $nutrition,
+    "Vitamin C"
+  ),
 
-                allergens,
-                traits,
+allergens,
+traits,
               };
-
+              if (name === "Oatmeal") {
+  console.log(
+    "PARSED OATMEAL:",
+    JSON.stringify(
+      menuItem,
+      null,
+      2
+    )
+  );
+}
               items.push(menuItem);
             });
         });

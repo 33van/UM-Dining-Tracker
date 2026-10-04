@@ -142,6 +142,7 @@ type PickerScreen =
 
 type CarbonSummary = {
   level: CarbonLevel;
+  score: number;
 
   low: number;
 
@@ -337,37 +338,23 @@ function getNutrientValue(
 function totalNutrient(
   loggedItems: LoggedDiningItem[],
   key: NutrientKey
-): number | null {
+): number {
   let total = 0;
 
-  let found =
-    false;
-
-  for (
-    const logged
-    of loggedItems
-  ) {
+  for (const logged of loggedItems) {
     const value =
-      getNutrientValue(
-        logged.menuItem,
-        key
-      );
+      logged.menuItem[key];
 
     if (
-      typeof value ===
-      "number"
+      typeof value === "number" &&
+      Number.isFinite(value)
     ) {
       total +=
-        value *
-        logged.servings;
-
-      found = true;
+        value * logged.servings;
     }
   }
 
-  return found
-    ? total
-    : null;
+  return total;
 }
 
 function formatNumber(
@@ -462,27 +449,25 @@ function getDailyCarbonSummary(
   let high = 0;
   let unknown = 0;
 
-  for (
-    const logged
-    of loggedItems
-  ) {
-    const carbon =
+  /*
+   * Count each serving according to
+   * Michigan Dining's carbon label.
+   */
+  for (const logged of loggedItems) {
+    const level =
       getCarbonLevel(
         logged.menuItem
       );
 
-    if (
-      carbon === "low"
-    ) {
-      low +=
-        logged.servings;
+    if (level === "low") {
+      low += logged.servings;
     } else if (
-      carbon === "medium"
+      level === "medium"
     ) {
       medium +=
         logged.servings;
     } else if (
-      carbon === "high"
+      level === "high"
     ) {
       high +=
         logged.servings;
@@ -501,61 +486,58 @@ function getDailyCarbonSummary(
     knownServings +
     unknown;
 
+  /*
+   * Continuous carbon scale:
+   *
+   * LOW    = 0
+   * MEDIUM = 50
+   * HIGH   = 100
+   *
+   * Example:
+   *
+   * 9 low + 1 high
+   * = (9×0 + 1×100) / 10
+   * = 10
+   *
+   * Still green, but shifted toward
+   * the yellow side.
+   */
+  let score = 0;
+
   let level:
     CarbonLevel =
     "unknown";
 
-  /*
-   * This is a categorical daily mix,
-   * NOT an estimate of kg CO2.
-   *
-   * Low = 1
-   * Medium = 2
-   * High = 3
-   *
-   * We average Michigan Dining's
-   * categorical labels based on servings.
-   */
-  if (
-    knownServings > 0
-  ) {
-    const score =
+  if (knownServings > 0) {
+    score =
       (
-        low * 1 +
-        medium * 2 +
-        high * 3
+        low * 0 +
+        medium * 50 +
+        high * 100
       ) /
       knownServings;
 
-    if (
-      score < 1.5
-    ) {
-      level =
-        "low";
+    if (score < 35) {
+      level = "low";
     } else if (
-      score < 2.5
+      score < 70
     ) {
-      level =
-        "medium";
+      level = "medium";
     } else {
-      level =
-        "high";
+      level = "high";
     }
   }
 
   return {
     level,
+    score,
 
     low,
-
     medium,
-
     high,
-
     unknown,
 
     knownServings,
-
     totalServings,
   };
 }
@@ -571,7 +553,95 @@ function carbonLabel(
 
   return level.toUpperCase();
 }
+function calculateDailyCalorieGoal(profile: {
+  weightLbs?: number;
+  heightFeet?: number;
+  heightInches?: number;
+  age?: number;
+  gender?: string;
+  calorieGoal?: number;
+  calorieGoalIsCustom?: boolean;
+}): number {
+  /*
+   * If the user explicitly chose their
+   * own calorie target, preserve it.
+   */
+  if (
+    profile.calorieGoalIsCustom &&
+    typeof profile.calorieGoal === "number"
+  ) {
+    return profile.calorieGoal;
+  }
 
+  const {
+    weightLbs,
+    heightFeet,
+    heightInches,
+    age,
+    gender,
+  } = profile;
+
+  /*
+   * Keep the existing fallback if
+   * onboarding data is incomplete.
+   */
+  if (
+    typeof weightLbs !== "number" ||
+    typeof heightFeet !== "number" ||
+    typeof heightInches !== "number" ||
+    typeof age !== "number"
+  ) {
+    return profile.calorieGoal ?? 2150;
+  }
+
+  /*
+   * Convert imperial onboarding values
+   * to metric.
+   */
+  const weightKg =
+    weightLbs * 0.453592;
+
+  const totalHeightInches =
+    heightFeet * 12 +
+    heightInches;
+
+  const heightCm =
+    totalHeightInches * 2.54;
+
+  /*
+   * Mifflin-St Jeor BMR.
+   */
+  let bmr =
+    10 * weightKg +
+    6.25 * heightCm -
+    5 * age;
+
+  if (
+    gender
+      ?.trim()
+      .toLowerCase() === "man"
+  ) {
+    bmr += 5;
+  } else if (
+    gender
+      ?.trim()
+      .toLowerCase() === "woman"
+  ) {
+    bmr -= 161;
+  }
+
+  /*
+   * Current app doesn't appear to have
+   * an activity multiplier available here,
+   * so use a moderate baseline.
+   */
+  const maintenanceCalories =
+    bmr * 1.55;
+
+  return Math.round(
+    maintenanceCalories
+  );
+}
 /* ============================================ */
 /* DASHBOARD                                    */
 /* ============================================ */
@@ -583,9 +653,9 @@ export default function DashboardScreen() {
     useOnboarding();
 
   const calorieGoal =
-    profile.calorieGoal ??
-    2150;
-
+  calculateDailyCalorieGoal(
+    profile
+  );
   const [
     showDiningPicker,
     setShowDiningPicker,
@@ -619,10 +689,19 @@ export default function DashboardScreen() {
     );
 
   const [
-    planned,
-    setPlanned,
-  ] =
-    useState(false);
+  recommendationLoading,
+  setRecommendationLoading,
+] = useState(false);
+
+const [
+  recommendedItems,
+  setRecommendedItems,
+] = useState<
+  Array<{
+    name: string;
+    servings: number;
+  }>
+>([]);
 
   /* ========================================== */
   /* CALORIES                                   */
@@ -658,7 +737,7 @@ export default function DashboardScreen() {
       calorieGoal -
         caloriesConsumed,
 
-      0
+      
     );
 
   const caloriePercent =
@@ -693,40 +772,90 @@ export default function DashboardScreen() {
   /* ========================================== */
   /* NUTRIENTS                                  */
   /* ========================================== */
+/* ========================================== */
+/* NUTRIENTS                                  */
+/* ========================================== */
 
-  const nutrientTotals =
-    useMemo(
-      () => {
-        const totals:
-          Partial<
-            Record<
-              NutrientKey,
-              number | null
-            >
-          > = {};
+const nutrientTotals =
+  useMemo<
+    Record<NutrientKey, number>
+  >(() => {
+    return {
+      proteinG:
+        totalNutrient(
+          loggedItems,
+          "proteinG"
+        ),
 
-        for (
-          const option
-          of NUTRIENT_OPTIONS
-        ) {
-          totals[
-            option.key
-          ] =
-            totalNutrient(
-              loggedItems,
-              option.key
-            );
-        }
+      carbsG:
+        totalNutrient(
+          loggedItems,
+          "carbsG"
+        ),
 
-        return totals;
-      },
+      fiberG:
+        totalNutrient(
+          loggedItems,
+          "fiberG"
+        ),
 
-      [
-        loggedItems,
-      ]
-    );
+      ironPercent:
+        totalNutrient(
+          loggedItems,
+          "ironPercent"
+        ),
 
-  const displayedNutrients =
+      vitaminAPercent:
+        totalNutrient(
+          loggedItems,
+          "vitaminAPercent"
+        ),
+
+      vitaminCPercent:
+        totalNutrient(
+          loggedItems,
+          "vitaminCPercent"
+        ),
+
+      cholesterolMg:
+        totalNutrient(
+          loggedItems,
+          "cholesterolMg"
+        ),
+
+      calciumPercent:
+        totalNutrient(
+          loggedItems,
+          "calciumPercent"
+        ),
+
+      sugarG:
+        totalNutrient(
+          loggedItems,
+          "sugarG"
+        ),
+
+      sodiumMg:
+        totalNutrient(
+          loggedItems,
+          "sodiumMg"
+        ),
+
+      totalFatG:
+        totalNutrient(
+          loggedItems,
+          "totalFatG"
+        ),
+    };
+  }, [loggedItems]);
+
+
+/*
+ * Nutrients the user chose to display
+ * in the Daily Balance card.
+ */
+const displayedNutrients:
+  NutrientConfig[] =
     NUTRIENT_OPTIONS.filter(
       (option) =>
         visibleNutrients.includes(
@@ -734,6 +863,10 @@ export default function DashboardScreen() {
         )
     );
 
+console.log(
+  "DAILY BALANCE:",
+  nutrientTotals
+);
   /* ========================================== */
   /* MODALS                                     */
   /* ========================================== */
@@ -757,6 +890,61 @@ export default function DashboardScreen() {
       true
     );
   }
+  async function openSmartRecommendation() {
+  try {
+    setRecommendationLoading(true);
+
+    const response = await fetch(
+      `${API_URL}/api/recommendations/next-meal`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          hall: "south-quad",
+          date: todayDateString(),
+          profile,
+          currentNutrition: {
+            caloriesConsumed,
+            calorieGoal,
+            nutrients: nutrientTotals,
+          },
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ??
+          "Could not generate a recommendation."
+      );
+    }
+
+    setRecommendedItems(
+      data.items ?? []
+    );
+
+    setPickerStartScreen("menu");
+    setShowDiningPicker(true);
+  } catch (error) {
+    console.error(
+      "SMART RECOMMENDATION ERROR:",
+      error
+    );
+
+    Alert.alert(
+      "Recommendation unavailable",
+      error instanceof Error
+        ? error.message
+        : "Could not recommend a meal."
+    );
+  } finally {
+    setRecommendationLoading(false);
+  }
+}
 
   /* ========================================== */
   /* ADD ITEMS                                  */
@@ -766,6 +954,14 @@ export default function DashboardScreen() {
     incoming:
       LoggedDiningItem[]
   ) {
+    console.log(
+    "FOOD BEING LOGGED:",
+    JSON.stringify(
+      incoming,
+      null,
+      2
+    )
+  );
     setLoggedItems(
       (current) => {
         const next =
@@ -826,31 +1022,79 @@ export default function DashboardScreen() {
   }
 
   function changeLoggedServings(
-    id: string,
-    difference: number
-  ) {
-    setLoggedItems(
-      (current) =>
+  id: string,
+  difference: number
+) {
+  setLoggedItems(
+    (current) => {
+      const updated =
         current
-          .map(
-            (item) =>
-              item.id === id
-                ? {
-                    ...item,
+          .map((item) => {
+            if (item.id !== id) {
+              return item;
+            }
 
-                    servings:
-                      item.servings +
-                      difference,
-                  }
-                : item
-          )
+            const newServings =
+              Math.max(
+                0,
+                item.servings +
+                  difference
+              );
+
+            console.log(
+              "UPDATED FOOD:",
+              item.menuItem.name,
+              "servings:",
+              newServings,
+              "nutrition:",
+              {
+                calories:
+                  item.menuItem.calories,
+                proteinG:
+                  item.menuItem.proteinG,
+                carbsG:
+                  item.menuItem.carbsG,
+                fiberG:
+                  item.menuItem.fiberG,
+                totalFatG:
+                  item.menuItem.totalFatG,
+                sugarG:
+                  item.menuItem.sugarG,
+                sodiumMg:
+                  item.menuItem.sodiumMg,
+                cholesterolMg:
+                  item.menuItem
+                    .cholesterolMg,
+                calciumPercent:
+                  item.menuItem
+                    .calciumPercent,
+                ironPercent:
+                  item.menuItem
+                    .ironPercent,
+                vitaminAPercent:
+                  item.menuItem
+                    .vitaminAPercent,
+                vitaminCPercent:
+                  item.menuItem
+                    .vitaminCPercent,
+              }
+            );
+
+            return {
+              ...item,
+              servings:
+                newServings,
+            };
+          })
           .filter(
             (item) =>
-              item.servings >
-              0
-          )
-    );
-  }
+              item.servings > 0
+          );
+
+      return updated;
+    }
+  );
+}
 
   /* ========================================== */
   /* SCREEN                                     */
@@ -1135,26 +1379,22 @@ export default function DashboardScreen() {
               {displayedNutrients.map(
                 (
                   nutrient
-                ) => {
-                  const value =
-                    nutrientTotals[
-                      nutrient.key
-                    ] ??
-                    null;
+                ) => {const value =
+                  nutrientTotals[
+                    nutrient.key
+                  ];
 
-                  const percent =
-                    value ===
-                    null
-                      ? 0
-                      : Math.min(
-                          (
-                            value /
-                            nutrient.target
-                          ) *
-                            100,
-
-                          100
-                        );
+                const percent =
+                  Math.min(
+                    Math.max(
+                      (
+                        value /
+                        nutrient.target
+                      ) * 100,
+                      0
+                    ),
+                    100
+                  );
 
                   return (
                     <View
@@ -1288,29 +1528,23 @@ export default function DashboardScreen() {
             </View>
 
             <Pressable
-              style={[
-                styles.planButton,
-
-                planned &&
-                  styles.planButtonSelected,
-              ]}
-              onPress={() =>
-                setPlanned(
-                  !planned
-                )
-              }
+              style={styles.planButton}
+              onPress={openSmartRecommendation}
+              disabled={recommendationLoading}
             >
-              <Text
-                style={
-                  styles.planButtonText
-                }
-              >
-                {planned
-                  ? "✓"
-                  : "+"}
-              </Text>
+              {recommendationLoading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text
+                  style={
+                    styles.planButtonText
+                  }
+                >
+                  +
+                </Text>
+              )}
             </Pressable>
-          </View>
+            </View>
 
           {/* ================================= */}
           {/* TODAY'S LOG                       */}
@@ -1442,31 +1676,31 @@ export default function DashboardScreen() {
           startScreen={
             pickerStartScreen
           }
+          recommendedItems={
+            recommendedItems
+          }
           visibleNutrients={
             visibleNutrients
           }
+
           dailyTotals={
             nutrientTotals
           }
           onChangeVisibleNutrients={
             setVisibleNutrients
           }
-          onClose={() =>
-            setShowDiningPicker(
-              false
-            )
-          }
-          onAddItems={(
-            items
-          ) => {
-            addDiningItems(
-              items
-            );
-
-            setShowDiningPicker(
-              false
-            );
+          onClose={() => {
+            setShowDiningPicker(false);
+            setRecommendedItems([]);
           }}
+          onAddItems={(items) => {
+            addDiningItems(items);
+
+            setRecommendedItems([]);
+
+            setShowDiningPicker(false);
+          }}
+                     
         />
       </View>
     </SafeAreaView>
@@ -2023,10 +2257,10 @@ function ServingControl({
 /* ============================================ */
 /* DINING PICKER                                */
 /* ============================================ */
-
 function DiningPickerModal({
   visible,
   startScreen,
+  recommendedItems,
   visibleNutrients,
   dailyTotals,
   onChangeVisibleNutrients,
@@ -2035,8 +2269,12 @@ function DiningPickerModal({
 }: {
   visible: boolean;
 
-  startScreen:
-    PickerScreen;
+  startScreen: PickerScreen;
+
+  recommendedItems: Array<{
+    name: string;
+    servings: number;
+  }>;
 
   visibleNutrients:
     NutrientKey[];
@@ -2291,17 +2529,100 @@ function DiningPickerModal({
               })
             );
 
-          if (
-            !cancelled
-          ) {
-            setMenuItems(
-              items
-            );
+          if (!cancelled) {
+  /*
+   * Build a lookup containing Gemini's
+   * recommendation ranking.
+   */
+  const recommendationOrder =
+    new Map(
+      recommendedItems.map(
+        (recommendation, index) => [
+          recommendation.name
+            .trim()
+            .toLowerCase(),
+          index,
+        ]
+      )
+    );
 
-            setServings(
-              {}
-            );
-          }
+  /*
+   * Put recommended foods at the top.
+   * If Gemini returns multiple foods,
+   * preserve Gemini's ranking.
+   */
+  const sortedItems =
+    [...items].sort((a, b) => {
+      const aOrder =
+        recommendationOrder.get(
+          a.name
+            .trim()
+            .toLowerCase()
+        );
+
+      const bOrder =
+        recommendationOrder.get(
+          b.name
+            .trim()
+            .toLowerCase()
+        );
+
+      if (
+        aOrder !== undefined &&
+        bOrder !== undefined
+      ) {
+        return aOrder - bOrder;
+      }
+
+      if (aOrder !== undefined) {
+        return -1;
+      }
+
+      if (bOrder !== undefined) {
+        return 1;
+      }
+
+      return 0;
+    });
+
+  /*
+   * Show all recommendations at the top,
+   * but automatically select ONLY the
+   * #1 recommendation.
+   */
+  const recommendedServings:
+    Record<string, number> = {};
+
+  const topRecommendation =
+    recommendedItems[0];
+
+  if (topRecommendation) {
+    const match =
+      items.find(
+        (item) =>
+          item.name
+            .trim()
+            .toLowerCase() ===
+          topRecommendation.name
+            .trim()
+            .toLowerCase()
+      );
+
+    if (match) {
+      recommendedServings[
+        match.id
+      ] = 1;
+    }
+  }
+
+  setMenuItems(
+    sortedItems
+  );
+
+  setServings(
+    recommendedServings
+  );
+}
         } catch (
           loadError
         ) {
@@ -2347,6 +2668,7 @@ function DiningPickerModal({
       visible,
       screen,
       selectedHall,
+      recommendedItems,
     ]
   );
 

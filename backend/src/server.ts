@@ -1,10 +1,20 @@
 import "dotenv/config";
-import type { UserProfile } from "./types/UserProfile";
+import type { UserProfile } from "./types/UserProfile.js";
+import {
+  sendIMessage,
+} from "./services/photon.js";
+
+import {
+  loadState,
+  saveState,
+  saveUserProfile,
+} from "./services/profileStore.js";
+
 
 import cors from "cors";
 import crypto from "crypto";
 
-import { normalizeUSPhone } from "./utils/phone";
+import { normalizeUSPhone } from "./utils/phone.js";
 import express from "express";
 
 import diningRouter from "./routes/dining.js";
@@ -90,7 +100,6 @@ app.post("/auth/phone/send-code", async (req, res) => {
   const code = generateVerificationCode();
 
   const codeHash = hashCode(code);
-
   // Code expires in 10 minutes.
   const expiresAt = Date.now() + 10 * 60 * 1000;
 
@@ -100,26 +109,39 @@ app.post("/auth/phone/send-code", async (req, res) => {
     attempts: 0,
   });
 
-  /*
-   * DEVELOPMENT ONLY
-   *
-   * Instead of texting the code, we'll print it.
-   *
-   * Later:
-   *
-   * await photon.sendMessage(...)
-   */
-  console.log("--------------------------------");
-  console.log("PHONE VERIFICATION");
-  console.log("Phone:", normalizedPhone);
-  console.log("Code:", code);
-  console.log("Expires:", new Date(expiresAt).toLocaleTimeString());
-  console.log("--------------------------------");
+    try {
+    await sendIMessage(
+      normalizedPhone,
+      `Your Maize verification code is ${code}. This code expires in 10 minutes.`
+    );
 
-  return res.json({
-    success: true,
-    message: "Verification code sent.",
-  });
+    console.log(
+      "Verification code sent through Photon:",
+      normalizedPhone
+    );
+
+    return res.json({
+      success: true,
+      message:
+        "Verification code sent.",
+    });
+  } catch (error) {
+    verificationCodes.delete(
+      normalizedPhone
+    );
+
+    console.error(
+      "VERIFICATION PHOTON ERROR:",
+      error
+    );
+
+    return res
+      .status(502)
+      .json({
+        error:
+          "Could not send verification code.",
+      });
+  }
 });
 
 
@@ -206,70 +228,131 @@ app.use("/api/dining", diningRouter);
 
 app.use("/api/recommendations", recommendationsRouter);
 
+// ------------------------------------------------------
+// CREATE USER PLAN
+// ------------------------------------------------------
+
+app.post(
+  "/api/users/plan",
+  async (req, res) => {
+    try {
+      console.log(
+        "1. PLAN REQUEST RECEIVED"
+      );
+
+      const profile =
+        req.body as UserProfile;
+
+      console.log(
+        "2. PROFILE PHONE:",
+        profile.phone
+      );
+
+      /*
+       * Save the one local user's profile.
+       */
+      await saveUserProfile(
+        profile
+      );
+
+      console.log(
+        "3. PROFILE SAVED"
+      );
+
+      /*
+       * Use the same phone number that
+       * the user entered during onboarding.
+       */
+      const normalizedPhone =
+        normalizeUSPhone(
+          profile.phone
+        );
+
+      console.log(
+        "4. NORMALIZED PHONE:",
+        normalizedPhone
+      );
+
+      if (!normalizedPhone) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "The user does not have a valid phone number.",
+          });
+      }
+
+      /*
+       * Check whether we've already sent
+       * the welcome message.
+       */
+      const state =
+  await loadState();
+
+      console.log(
+        "5. STATE LOADED:",
+        state
+      );
+
+      if (!state.welcomeSent) {
+        console.log(
+          "6. SENDING WELCOME THROUGH PHOTON"
+        );
+
+        await sendIMessage(
+          normalizedPhone,
+          "Hi, I am Maize and I will be your dining hall expert!"
+        );
+
+        console.log(
+          "7. PHOTON WELCOME SENT"
+        );
+
+        /*
+         * Only mark it sent after Photon
+         * successfully sends the iMessage.
+         */
+        await saveState({
+          ...state,
+          welcomeSent: true,
+        });
+
+        console.log(
+          "8. WELCOME STATE SAVED"
+        );
+      }
+
+      return res.json({
+        success: true,
+        message:
+          "Maize plan created.",
+      });
+    } catch (error) {
+      console.error(
+        "CREATE PLAN ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          error:
+            "Could not create Maize plan.",
+        });
+    }
+  }
+);
+
 
 // ------------------------------------------------------
 // Start server
 // ------------------------------------------------------
-app.post("/api/users/plan", async (req, res) => {
-  try {
-    const profile =
-      req.body as UserProfile;
 
-    if (!profile.phone) {
-      return res.status(400).json({
-        error: "Phone number is required.",
-      });
-    }
-
-    if (!profile.calorieGoal) {
-      return res.status(400).json({
-        error: "Calorie goal is required.",
-      });
-    }
-
-    if (
-      !profile.recommendationWindows?.length
-    ) {
-      return res.status(400).json({
-        error:
-          "At least one recommendation window is required.",
-      });
-    }
-
+app.listen(
+  PORT,
+  () => {
     console.log(
-      "========== NEW MAIZE PLAN =========="
+      `Maize backend running on port ${PORT}`
     );
-
-    console.log(
-      JSON.stringify(profile, null, 2)
-    );
-
-    console.log(
-      "===================================="
-    );
-
-    /*
-     * NEXT:
-     *
-     * await planService.create(profile);
-     */
-
-    return res.status(201).json({
-      success: true,
-      message: "Maize plan created.",
-    });
-  } catch (error) {
-    console.error(
-      "CREATE PLAN ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      error: "Could not create plan.",
-    });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Maize backend running on port ${PORT}`);
-});
+);

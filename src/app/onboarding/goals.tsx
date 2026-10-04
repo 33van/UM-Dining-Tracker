@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGoogleCalendarConnect } from "../../hooks/useGoogleCalendarConnect";
 
 import {
@@ -22,7 +22,73 @@ import {
 } from "../../constants/foodPreferences";
 
 import { useOnboarding } from "../../context/OnboardingContext";
+function calculateRecommendedCalories(profile: {
+  heightFeet?: number;
+  heightInches?: number;
+  weightLbs?: number;
+  age?: number;
+  gender?: string;
+}): number {
+  const {
+    heightFeet,
+    heightInches,
+    weightLbs,
+    age,
+    gender,
+  } = profile;
 
+  if (
+    typeof heightFeet !== "number" ||
+    typeof heightInches !== "number" ||
+    typeof weightLbs !== "number" ||
+    typeof age !== "number"
+  ) {
+    return 2150;
+  }
+
+  // Convert pounds -> kilograms
+  const weightKg =
+    weightLbs * 0.453592;
+
+  // Convert feet/inches -> centimeters
+  const totalHeightInches =
+    heightFeet * 12 +
+    heightInches;
+
+  const heightCm =
+    totalHeightInches * 2.54;
+
+  // Mifflin-St Jeor BMR
+  let bmr =
+    10 * weightKg +
+    6.25 * heightCm -
+    5 * age;
+
+  const normalizedGender =
+    gender
+      ?.trim()
+      .toLowerCase();
+
+  if (
+    normalizedGender === "man" ||
+    normalizedGender === "male"
+  ) {
+    bmr += 5;
+  } else if (
+    normalizedGender === "woman" ||
+    normalizedGender === "female"
+  ) {
+    bmr -= 161;
+  }
+
+  // Moderate activity baseline
+  const dailyCalories =
+    bmr * 1.55;
+
+  return Math.round(
+    dailyCalories
+  );
+}
 
 export default function GoalsScreen() {
   const {
@@ -38,32 +104,66 @@ export default function GoalsScreen() {
 
 
   /* ========================================== */
-  /* CALORIE GOAL                               */
-  /* ========================================== */
+/* CALORIE GOAL                               */
+/* ========================================== */
 
-  const [calorieGoal, setCalorieGoal] =
-    useState(
-      profile.calorieGoal ?? 2150
-    );
+const [
+  calorieGoal,
+  setCalorieGoal,
+] = useState(() => {
+  if (
+    profile.calorieGoalIsCustom &&
+    typeof profile.calorieGoal === "number"
+  ) {
+    return profile.calorieGoal;
+  }
 
-  const [
-    calorieGoalIsCustom,
-    setCalorieGoalIsCustom,
-  ] = useState(
-    profile.calorieGoalIsCustom ?? false
+  return calculateRecommendedCalories(
+    profile
   );
+});
 
+const [
+  calorieGoalIsCustom,
+  setCalorieGoalIsCustom,
+] = useState(
+  profile.calorieGoalIsCustom ?? false
+);
+
+/*
+ * Recalculate the recommended calorie
+ * goal whenever profile information changes,
+ * unless the user manually customized it.
+ */
+useEffect(() => {
+  if (calorieGoalIsCustom) {
+    return;
+  }
+
+  setCalorieGoal(
+    calculateRecommendedCalories(
+      profile
+    )
+  );
+}, [
+  profile.heightFeet,
+  profile.heightInches,
+  profile.weightLbs,
+  profile.age,
+  profile.gender,
+  calorieGoalIsCustom,
+]);
 
   /* ========================================== */
   /* FOOD PREFERENCES                           */
   /* ========================================== */
 
   const [
-    preferences,
-    setPreferences,
-  ] = useState<FoodPreference[]>(
-    profile.foodPreferences ?? []
-  );
+  preferences,
+  setPreferences,
+] = useState<FoodPreference[]>(
+  (profile.foodPreferences ?? []) as FoodPreference[]
+);
 
 
   function togglePreference(
@@ -1253,6 +1353,12 @@ const styles = StyleSheet.create({
     color: colors.green,
   },
 
+  calendarNotice: {
+  marginTop: 8,
+  color: colors.muted,
+  fontSize: 8,
+  lineHeight: 12,
+},
 
   /* Calendar connected status */
 
