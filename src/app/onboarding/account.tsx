@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { API_URL } from "../../services/api";
+
 // import { colors } from "../../constants/theme";
 import {
   KeyboardAvoidingView,
@@ -10,21 +12,80 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
-
 import { colors } from "../../constants/theme";
 
+
+import { normalizeUSPhone } from "../../utils/phone";
+import { router } from "expo-router";
+import { Alert } from "react-native";
+
+
 export default function AccountScreen() {
-  const [signInMethod, setSignInMethod] =
-    useState<"umich" | "phone">("umich");
-
-  const [uniqname, setUniqname] = useState("");
   const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function continueOnboarding() {
-    // Authentication will eventually happen here.
-    router.push("/onboarding/about");
+
+  async function handlePhoneLogin() {
+
+   const normalizedPhone = normalizeUSPhone(phone);
+
+
+    if (!normalizedPhone) {
+      Alert.alert(
+        "Invalid phone number",
+        "Enter a valid 10-digit US phone number."
+      );
+      return;
+    }
+  try {
+    setLoading(true);
+
+
+    const response = await fetch(
+      `${API_URL}/auth/phone/send-code`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phone: normalizedPhone,
+        }),
+      }
+    );
+
+
+
+    const data = await response.json();
+
+
+
+    if (!response.ok) {
+      Alert.alert(
+        "Couldn't send code",
+        data.error ?? "Unable to send verification code."
+      );
+      return;
+    }
+
+
+    router.push({
+      pathname: "/onboarding/verify-phone",
+      params: {
+        phone: normalizedPhone,
+      },
+    });
+  } catch (error) {
+    console.error("PHONE LOGIN ERROR:", error);
+
+    Alert.alert(
+      "Connection error",
+      "Could not connect to the backend."
+    );
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -68,103 +129,43 @@ export default function AccountScreen() {
           </Text>
 
           <Text style={styles.description}>
-            Create your account with a UMich uniqname or your mobile phone.
+            Enter your mobile phone number to get started.
           </Text>
 
           {/* Toggle */}
-          <View style={styles.toggleContainer}>
-            <Pressable
-              style={[
-                styles.toggleButton,
-                signInMethod === "umich" &&
-                  styles.toggleButtonActive,
-              ]}
-              onPress={() => setSignInMethod("umich")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  signInMethod === "umich" &&
-                    styles.toggleTextActive,
-                ]}
-              >
-                UMich account
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.toggleButton,
-                signInMethod === "phone" &&
-                  styles.toggleButtonActive,
-              ]}
-              onPress={() => setSignInMethod("phone")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  signInMethod === "phone" &&
-                    styles.toggleTextActive,
-                ]}
-              >
-                Phone number
-              </Text>
-            </Pressable>
-          </View>
-
           <Text style={styles.label}>
-            {signInMethod === "umich"
-              ? "UMICH UNIQNAME"
-              : "MOBILE PHONE"}
+          MOBILE PHONE
           </Text>
 
-          {signInMethod === "umich" ? (
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputPrefix}>@</Text>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputPrefix}>
+              +1
+            </Text>
 
-              <TextInput
-                style={styles.input}
-                value={uniqname}
-                onChangeText={setUniqname}
-                placeholder="alexs"
-                placeholderTextColor="#9AA0A8"
-                autoCapitalize="none"
-              />
-
-              <Text style={styles.inputSuffix}>
-                @umich.edu
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputPrefix}>
-                +1
-              </Text>
-
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="(734) 555-0123"
-                placeholderTextColor="#9AA0A8"
-                keyboardType="phone-pad"
-              />
-            </View>
-          )}
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="(734) 555-0123"
+              placeholderTextColor="#9AA0A8"
+              keyboardType="phone-pad"
+            />
+          </View>
 
           <Pressable
             style={styles.continueButton}
-            onPress={continueOnboarding}
+            disabled={loading}
+            onPress={handlePhoneLogin}
           >
-            <View style={styles.oktaIcon}>
-              <Text style={styles.oktaIconText}>
-                {signInMethod === "umich" ? "o" : "#"}
+            <View style={styles.phoneIcon}>
+              <Text style={styles.phoneIconText}>
+                #
               </Text>
             </View>
 
             <Text style={styles.continueText}>
-              {signInMethod === "umich"
-                ? "Continue with UMich Okta"
+              {loading
+                ? "Sending code..."
                 : "Text me a verification code"}
             </Text>
 
@@ -179,7 +180,8 @@ export default function AccountScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
+  }
+
 
 function Brand() {
   return (
@@ -400,36 +402,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  toggleContainer: {
-    flexDirection: "row",
-    gap: 4,
-    padding: 4,
-    marginBottom: 18,
-    borderRadius: 12,
-    backgroundColor: "#E9EBEB",
-  },
-
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 9,
-  },
-
-  toggleButtonActive: {
-    backgroundColor: "#FFFFFF",
-  },
-
-  toggleText: {
-    color: "#747C87",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-
-  toggleTextActive: {
-    color: colors.navy,
-  },
-
   label: {
     marginBottom: 7,
     color: "#59616D",
@@ -462,10 +434,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  inputSuffix: {
-    color: "#8A919B",
-    fontSize: 10,
-  },
 
   continueButton: {
     height: 51,
@@ -478,7 +446,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  oktaIcon: {
+  phoneIcon: {
     width: 25,
     height: 25,
     borderRadius: 7,
@@ -487,7 +455,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  oktaIconText: {
+  phoneIconText: {
     color: "#FFFFFF",
     fontWeight: "800",
   },

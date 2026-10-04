@@ -1,11 +1,18 @@
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+
+import { OnboardingProvider } from "../context/OnboardingContext";
 
 export default function RootLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    />
+    <OnboardingProvider>
+      <StatusBar style="dark" />
+
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      />
+    </OnboardingProvider>
   );
 }
