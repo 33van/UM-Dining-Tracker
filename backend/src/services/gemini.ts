@@ -311,3 +311,101 @@ sustainability goals.
         : "",
   };
 }
+
+// import type {
+//   UserProfile,
+// } from "../types/UserProfile.js";
+
+
+export async function askGemini(
+  message: string,
+  profile: UserProfile
+): Promise<string> {
+  const prompt = `
+You are Maize, a friendly University of Michigan dining assistant.
+
+You are chatting with the user through iMessage.
+
+Keep responses concise and conversational because they are being sent as text messages.
+
+USER PROFILE:
+${JSON.stringify(profile, null, 2)}
+
+USER MESSAGE:
+${message}
+
+Instructions:
+- Answer the user's question directly.
+- Use the user's profile when relevant.
+- - The user's listed allergies are HARD RESTRICTIONS.
+- NEVER recommend, suggest, or positively mention a food that contains or may contain one of the user's allergens.
+- Check every food suggestion against the user's allergies before responding.
+- Respect all dietary preferences.
+- Consider health considerations when relevant.
+- Consider the user's calorie goal when discussing food.
+- If you are uncertain whether a food conflicts with an allergy, do not recommend it.
+- If the question is unrelated to food or nutrition, you can still answer conversationally.
+- Do not mention that you are Gemini.
+- You are Maize.
+`;
+
+  const models = [
+    "gemini-3.8-flash",
+  ];
+
+  let lastError: unknown;
+
+  for (const model of models) {
+    for (
+      let attempt = 1;
+      attempt <= 2;
+      attempt++
+    ) {
+      try {
+        console.log(
+          `Gemini: ${model}, attempt ${attempt}`
+        );
+
+        const response =
+          await ai.models.generateContent({
+            model,
+            contents: prompt,
+          });
+
+        const reply =
+          response.text?.trim();
+
+        if (reply) {
+          return reply;
+        }
+
+        throw new Error(
+          "Gemini returned an empty response."
+        );
+      } catch (error) {
+        lastError = error;
+
+        console.error(
+          `Gemini ${model} attempt ${attempt} failed:`,
+          error
+        );
+
+        if (attempt < 2) {
+          await new Promise(
+            (resolve) =>
+              setTimeout(
+                resolve,
+                1000
+              )
+          );
+        }
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(
+        "Gemini is temporarily unavailable."
+      );
+}

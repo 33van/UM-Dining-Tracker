@@ -3,13 +3,21 @@ import type { UserProfile } from "./types/UserProfile.js";
 import {
   sendIMessage,
 } from "./services/photon.js";
-
 import {
   loadState,
   saveState,
   saveUserProfile,
 } from "./services/profileStore.js";
+import {
+  askGemini,
+} from "./services/gemini.js";
+import {
+  sendMealReminder,
+} from "./services/mealReminder.js";
 
+import {
+  loadUserProfile,
+} from "./services/profileStore.js";
 
 import cors from "cors";
 import crypto from "crypto";
@@ -347,6 +355,174 @@ app.post(
 // ------------------------------------------------------
 // Start server
 // ------------------------------------------------------
+
+app.post(
+  "/api/demo/meal-reminder",
+  async (req, res) => {
+    try {
+      const {
+  meal,
+  nutrition,
+  targets,
+} = req.body;
+
+      if (
+        ![
+          "Breakfast",
+          "Lunch",
+          "Dinner",
+        ].includes(meal)
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Invalid meal.",
+          });
+      }
+
+      const profile =
+        await loadUserProfile();
+
+      if (!profile) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "No Maize profile exists.",
+          });
+      }
+
+      /*
+       * DEMO:
+       * Replace this later with actual
+       * location/open-hours calculation.
+       */
+      const diningHall =
+        "South Quad";
+
+      await sendMealReminder(
+  profile,
+  nutrition,
+  targets,
+  diningHall,
+  meal
+);
+
+      return res.json({
+        success: true,
+      });
+    } catch (error) {
+      console.error(
+        "DEMO MEAL REMINDER ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          error:
+            "Could not send meal reminder.",
+        });
+    }
+  }
+);
+app.post(
+  "/api/messages/incoming",
+  async (req, res) => {
+    try {
+      const {
+        message,
+      } = req.body;
+
+      if (
+        typeof message !== "string" ||
+        !message.trim()
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Message is required.",
+          });
+      }
+
+      /*
+       * Load the profile created during
+       * onboarding.
+       */
+      const profile =
+        await loadUserProfile();
+
+      if (!profile) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "No Maize user profile exists.",
+          });
+      }
+
+      console.log(
+        "\nUSER:",
+        message
+      );
+
+      /*
+       * Send the incoming iMessage
+       * to Gemini.
+       */
+      const reply =
+        await askGemini(
+          message,
+          profile
+        );
+
+      console.log(
+        "MAIZE:",
+        reply,
+        "\n"
+      );
+
+      /*
+       * Spectrum needs the reply so it
+       * can send it back into the same
+       * iMessage conversation.
+       */
+      return res.json({
+        success: true,
+        reply,
+      });
+
+    } catch (error) {
+  console.error(
+    "INCOMING MESSAGE ERROR:",
+    error
+  );
+
+  if (error instanceof Error) {
+    console.error(
+      "ERROR MESSAGE:",
+      error.message
+    );
+
+    console.error(
+      "ERROR STACK:",
+      error.stack
+    );
+  }
+
+  return res
+    .status(500)
+    .json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Maize couldn't respond.",
+    });
+}
+  }
+);
 
 app.listen(
   PORT,

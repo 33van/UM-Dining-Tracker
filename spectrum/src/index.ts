@@ -115,7 +115,142 @@ await space.send(
     }
   }
 );
+/*
+ * ==========================================
+ * INCOMING IMESSAGE -> GEMINI
+ * ==========================================
+ */
 
+async function listenForMessages() {
+  console.log(
+    "Listening for incoming iMessages..."
+  );
+
+  for await (
+    const [
+      space,
+      message,
+    ] of spectrum.messages
+  ) {
+    try {
+      /*
+       * Temporary debug.
+       *
+       * We need this to confirm which
+       * messages are inbound vs outbound.
+       */
+      console.log(
+        "RAW MESSAGE:",
+        message
+      );
+
+      /*
+       * Only handle text messages.
+       */
+      if (
+        message.content.type !==
+        "text"
+      ) {
+        continue;
+      }
+
+      const text =
+        message.content.text;
+
+      if (
+        typeof text !== "string" ||
+        !text.trim()
+      ) {
+        continue;
+      }
+
+      console.log(
+        "USER IMESSAGE:",
+        text
+      );
+
+      /*
+       * Ask the Maize backend.
+       *
+       * The backend:
+       * 1. Loads UserProfile
+       * 2. Sends profile + message to Gemini
+       * 3. Returns Gemini's response
+       */
+      const response =
+        await fetch(
+          "http://localhost:3000/api/messages/incoming",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                message:
+                  text.trim(),
+              }),
+          }
+        );
+
+      if (!response.ok) {
+        const details =
+          await response.text();
+
+        console.error(
+          "MAIZE BACKEND ERROR:",
+          details
+        );
+
+        continue;
+      }
+
+      const data =
+        await response.json() as {
+          success?: boolean;
+          reply?: string;
+        };
+
+      if (
+        typeof data.reply !==
+          "string" ||
+        !data.reply.trim()
+      ) {
+        console.error(
+          "Backend returned no Gemini reply."
+        );
+
+        continue;
+      }
+
+      console.log(
+        "MAIZE:",
+        data.reply
+      );
+
+      /*
+       * Reply to the SAME iMessage
+       * conversation the user messaged.
+       */
+      await space.send(
+        data.reply
+      );
+
+      console.log(
+        "Maize iMessage reply sent."
+      );
+
+    } catch (error) {
+      console.error(
+        "IMESSAGE CHAT ERROR:",
+        error
+      );
+    }
+  }
+}
 server.listen(
   4000,
   () => {
@@ -124,3 +259,4 @@ server.listen(
     );
   }
 );
+void listenForMessages();

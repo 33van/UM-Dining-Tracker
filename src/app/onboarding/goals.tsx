@@ -98,6 +98,7 @@ export default function GoalsScreen() {
 
   const {
   connect,
+  refetch,
   connecting,
   notice,
 } = useGoogleCalendarConnect();
@@ -153,6 +154,45 @@ useEffect(() => {
   profile.gender,
   calorieGoalIsCustom,
 ]);
+
+useEffect(() => {
+  const blocks =
+    profile.freeTimeBlocks ?? [];
+
+  if (blocks.length === 0) {
+    return;
+  }
+
+  console.log(
+    "\n=========================================="
+  );
+
+  console.log(
+    "GOOGLE CALENDAR FREE TIME"
+  );
+
+  console.log(
+    "=========================================="
+  );
+
+  console.log(
+    `Free time blocks found: ${blocks.length}`
+  );
+
+  console.log("");
+
+  blocks.forEach(
+    (block, index) => {
+      console.log(
+        `${index + 1}. ${block.start} - ${block.end}`
+      );
+    }
+  );
+
+  console.log(
+    "==========================================\n"
+  );
+}, [profile.freeTimeBlocks]);
 
   /* ========================================== */
   /* FOOD PREFERENCES                           */
@@ -661,7 +701,11 @@ async function handleCalendarPress() {
         opacity: 0.6,
       },
     ]}
-    onPress={handleCalendarPress}
+    onPress={
+  profile.googleCalendarConnected
+    ? refetch
+    : handleCalendarPress
+}
     disabled={connecting}
   >
 
@@ -700,7 +744,7 @@ async function handleCalendarPress() {
       {connecting
         ? "Connecting..."
         : profile.googleCalendarConnected
-        ? "Refresh"
+        ? "Refetch"
         : "Connect"}
     </Text>
 

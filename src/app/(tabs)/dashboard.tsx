@@ -645,6 +645,10 @@ function calculateDailyCalorieGoal(profile: {
 /* ============================================ */
 /* DASHBOARD                                    */
 /* ============================================ */
+type DemoMeal =
+  | "Breakfast"
+  | "Lunch"
+  | "Dinner";
 
 export default function DashboardScreen() {
   const {
@@ -661,6 +665,17 @@ export default function DashboardScreen() {
     setShowDiningPicker,
   ] =
     useState(false);
+
+
+const [
+  showDemoMeals,
+  setShowDemoMeals,
+] = useState(false);
+
+const [
+  demoSending,
+  setDemoSending,
+] = useState(false);
 
   const [
     pickerStartScreen,
@@ -693,6 +708,66 @@ export default function DashboardScreen() {
   setRecommendationLoading,
 ] = useState(false);
 
+// ==============================
+// ==         DEMO             ==
+// ==============================
+<View style={styles.demoSection}>
+  <Pressable
+    style={styles.demoButton}
+    onPress={() =>
+      setShowDemoMeals(
+        (current) => !current
+      )
+    }
+  >
+    <Text
+      style={
+        styles.demoButtonText
+      }
+    >
+      DEMO
+    </Text>
+  </Pressable>
+
+  {showDemoMeals && (
+    <View
+      style={
+        styles.demoMealButtons
+      }
+    >
+      {(
+        [
+          "Breakfast",
+          "Lunch",
+          "Dinner",
+        ] as DemoMeal[]
+      ).map((meal) => (
+        <Pressable
+          key={meal}
+          style={
+            styles.demoMealButton
+          }
+          disabled={
+            demoSending
+          }
+          onPress={() =>
+            sendDemoReminder(
+              meal
+            )
+          }
+        >
+          <Text
+            style={
+              styles.demoMealButtonText
+            }
+          >
+            {meal}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  )}
+</View>
 const [
   recommendedItems,
   setRecommendedItems,
@@ -890,6 +965,122 @@ console.log(
       true
     );
   }
+  async function sendDemoReminder(
+  meal: DemoMeal
+) {
+  try {
+    setDemoSending(true);
+
+    const response = await fetch(
+      `${API_URL}/api/demo/meal-reminder`,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          meal,
+
+          nutrition: {
+            caloriesConsumed,
+
+            proteinG:
+              nutrientTotals.proteinG ??
+              0,
+
+            carbsG:
+              nutrientTotals.carbsG ??
+              0,
+
+            fatG:
+              nutrientTotals.totalFatG ??
+              0,
+
+            fiberG:
+              nutrientTotals.fiberG ??
+              0,
+
+            sugarG:
+              nutrientTotals.sugarG ??
+              0,
+
+            sodiumMg:
+              nutrientTotals.sodiumMg ??
+              0,
+
+            cholesterolMg:
+              nutrientTotals
+                .cholesterolMg ??
+              0,
+
+            calciumPercent:
+              nutrientTotals
+                .calciumPercent ??
+              0,
+
+            ironPercent:
+              nutrientTotals
+                .ironPercent ??
+              0,
+
+            vitaminAPercent:
+              nutrientTotals
+                .vitaminAPercent ??
+              0,
+
+            vitaminCPercent:
+              nutrientTotals
+                .vitaminCPercent ??
+              0,
+          },
+          targets: Object.fromEntries(
+            NUTRIENT_OPTIONS.map(
+              (nutrient) => [
+                nutrient.key,
+                nutrient.target,
+              ]
+            )
+          ),
+          
+        }),
+      }
+    );
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ??
+          "Could not send reminder."
+      );
+    }
+
+    setShowDemoMeals(false);
+
+    Alert.alert(
+      "Demo reminder sent",
+      `${meal} reminder sent through Maize.`
+    );
+  } catch (error) {
+    console.error(
+      "DEMO REMINDER ERROR:",
+      error
+    );
+
+    Alert.alert(
+      "Could not send reminder",
+      error instanceof Error
+        ? error.message
+        : "Something went wrong."
+    );
+  } finally {
+    setDemoSending(false);
+  }
+}
   async function openSmartRecommendation() {
   try {
     setRecommendationLoading(true);
@@ -1151,6 +1342,52 @@ console.log(
               />
             </View>
           </View>
+
+          {/* DEMO CONTROLS */}
+
+<View style={styles.demoSection}>
+  <Pressable
+    style={styles.demoButton}
+    onPress={() =>
+      setShowDemoMeals(
+        (current) => !current
+      )
+    }
+  >
+    <Text style={styles.demoButtonText}>
+      DEMO
+    </Text>
+  </Pressable>
+
+  {showDemoMeals && (
+    <View style={styles.demoMealButtons}>
+      {(
+        [
+          "Breakfast",
+          "Lunch",
+          "Dinner",
+        ] as DemoMeal[]
+      ).map((meal) => (
+        <Pressable
+          key={meal}
+          style={styles.demoMealButton}
+          disabled={demoSending}
+          onPress={() =>
+            sendDemoReminder(meal)
+          }
+        >
+          <Text
+            style={
+              styles.demoMealButtonText
+            }
+          >
+            {meal}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  )}
+</View>
 
           {/* WELCOME */}
 
@@ -3836,6 +4073,43 @@ const styles =
       justifyContent:
         "center",
     },
+    demoSection: {
+  alignItems: "flex-end",
+  marginBottom: 12,
+},
+
+demoButton: {
+  paddingHorizontal: 12,
+  paddingVertical: 7,
+  borderRadius: 8,
+  backgroundColor: colors.navy,
+},
+
+demoButtonText: {
+  color: "#FFFFFF",
+  fontSize: 8,
+  fontWeight: "800",
+  letterSpacing: 1,
+},
+
+demoMealButtons: {
+  flexDirection: "row",
+  gap: 6,
+  marginTop: 7,
+},
+
+demoMealButton: {
+  paddingHorizontal: 10,
+  paddingVertical: 7,
+  borderRadius: 8,
+  backgroundColor: colors.maize,
+},
+
+demoMealButtonText: {
+  color: colors.navy,
+  fontSize: 8,
+  fontWeight: "700",
+},
 
     streakNumber: {
       color:

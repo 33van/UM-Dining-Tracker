@@ -55,12 +55,13 @@ export function useGoogleCalendarConnect() {
         Platform.OS === "web" ? ResponseType.Token : ResponseType.Code,
       usePKCE: Platform.OS !== "web",
       extraParams:
-        Platform.OS === "web"
-          ? undefined
-          : {
-              access_type: "offline",
-              prompt: "consent",
-            },
+  Platform.OS === "web"
+    ? undefined
+    : {
+        access_type: "offline",
+        prompt:
+          "select_account consent",
+      },
     },
     googleDiscovery
   );
@@ -216,10 +217,62 @@ export function useGoogleCalendarConnect() {
       setConnecting(false);
     }
   }
+  async function refetch() {
+  if (!clientId) {
+    const message =
+      Platform.OS === "ios"
+        ? "Add the iOS Google client ID, then restart Expo so the app can read it."
+        : "Google Calendar connects on the iOS app with the iOS client ID.";
+
+    setNotice(message);
+
+    Alert.alert(
+      "Google Calendar",
+      message
+    );
+
+    return;
+  }
+
+  if (!request) {
+    const message =
+      "Google sign-in is still loading. Try again in a moment.";
+
+    setNotice(message);
+
+    return;
+  }
+
+  /*
+   * Don't reuse calendarSession here.
+   *
+   * Refetch should deliberately open
+   * Google's authentication flow again.
+   */
+  setNotice(null);
+
+  /*
+   * Allow the next successful OAuth
+   * response to be handled.
+   */
+  handled.current = null;
+
+  setConnecting(true);
+
+  const result =
+    await promptAsync();
+
+  if (
+    result.type !== "success"
+  ) {
+    setConnecting(false);
+  }
+}
 
   return {
-    connect,
-    connecting,
-    notice,
-  };
+  connect,
+  refetch,
+  connecting,
+  notice,
+};
 }
